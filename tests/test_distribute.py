@@ -20,8 +20,8 @@ TARGET_TEST_SUITE = os.environ.get("TARGET_TEST_SUITE", "NPU")
 
 @pytest.mark.parametrize(
     "model, distributed_executor_backend,  tp", [
-        ("Qwen/QwQ-32B", "mp", "4"),
-        ("Qwen/QwQ-32B", "mp", "4"),
+        ("Qwen/QwQ-32B", "mp", 4),
+        #("Qwen/QwQ-32B", "mp", 4),
     ])
 def test_models_distributed(
     monkeypatch: pytest.MonkeyPatch,
