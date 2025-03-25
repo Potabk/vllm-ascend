@@ -345,11 +345,13 @@ def vllm_runner():
 _T = TypeVar("_T", nn.Module, torch.Tensor, BatchEncoding, BatchFeature, dict)
 
 
+# Inspired from https://github.com/vllm-project/vllm/blob/main/tests/conftest.py
 class HfRunner:
 
     def get_default_device(self):
         from vllm.platforms import current_platform
 
+        # Set npu compatible device
         return current_platform.device_name or 'cpu'
 
     def wrap_device(self, x: _T, device: Optional[str] = None) -> _T:
