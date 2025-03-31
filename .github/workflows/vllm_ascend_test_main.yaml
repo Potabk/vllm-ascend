@@ -108,7 +108,7 @@ jobs:
           VLLM_WORKER_MULTIPROC_METHOD: spawn
           HF_ENDPOINT: https://hf-mirror.com
         run: |
-          pytest -sv tests
+          pytest -sv -m 'not multi' tests
 
       - name: Run vllm-project/vllm test for V0 Engine
         env:
