@@ -108,7 +108,7 @@ jobs:
           VLLM_WORKER_MULTIPROC_METHOD: spawn
           HF_ENDPOINT: https://hf-mirror.com
         run: |
-          pytest -sv -m 'not multi' tests
+          pytest -sv -m 'not multinpu' tests
 
       - name: Run vllm-project/vllm test for V0 Engine
         env:
@@ -188,4 +188,4 @@ jobs:
           VLLM_USE_V1: 0
           PYTORCH_NPU_ALLOC_CONF: max_split_size_mb:256
         run: |
-          pytest -sv -m multi tests/
+          pytest -sv -m multinpu tests/

@@ -58,6 +58,8 @@ def test_models(
 
 
 pytest.mark.multinpu
+
+
 @pytest.mark.parametrize("model, distributed_executor_backend", [
     ("Qwen/QwQ-32B", "mp"),
 ])
