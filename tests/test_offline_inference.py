@@ -57,9 +57,7 @@ def test_models(
         vllm_model.generate_greedy(example_prompts, max_tokens)
 
 
-pytest.mark.multi
-
-
+pytest.mark.multinpu
 @pytest.mark.parametrize("model, distributed_executor_backend", [
     ("Qwen/QwQ-32B", "mp"),
 ])
