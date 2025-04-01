@@ -166,6 +166,8 @@ jobs:
 
       - name: Install vllm-project/vllm-ascend
         run: |
+          pip uninstall -y numpy
+          pip install -r requirements-dev.txt
           pip install -e .
 
       - name: Install pta
@@ -182,7 +184,6 @@ jobs:
           fi
 
           pip install /root/.cache/pta/torch_npu-2.5.1.dev20250320-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl
-
       - name: Run vllm-project/vllm-ascend test
         env:
           VLLM_USE_V1: 0
