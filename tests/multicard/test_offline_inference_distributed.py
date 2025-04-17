@@ -50,7 +50,3 @@ def test_models_distributed(model: str,
     ) as vllm_model:
         vllm_model.generate_greedy(example_prompts, max_tokens)
 
-
-if __name__ == "__main__":
-    import pytest
-    pytest.main([__file__])

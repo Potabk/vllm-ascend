@@ -18,6 +18,7 @@
 #
 
 import gc
+import contextlib
 from typing import List, Optional, Tuple, TypeVar, Union
 
 import numpy as np
@@ -48,6 +49,8 @@ PromptVideoInput = _PromptMultiModalInput[np.ndarray]
 def cleanup_dist_env_and_memory():
     destroy_model_parallel()
     destroy_distributed_environment()
+    with contextlib.suppress(AssertionError):
+        torch.distributed.destroy_process_group()
     gc.collect()
     torch.npu.empty_cache()
 
