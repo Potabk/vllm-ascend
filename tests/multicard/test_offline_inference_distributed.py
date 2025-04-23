@@ -49,6 +49,7 @@ def test_models_distributed(model: str,
             dtype=dtype,
             tensor_parallel_size=4,
             distributed_executor_backend=distributed_executor_backend,
+            trust_remote_code=True,
     ) as vllm_model:
         vllm_model.generate_greedy(example_prompts, max_tokens)
 
