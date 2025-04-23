@@ -48,10 +48,10 @@ def test_models(model: str, dtype: str, max_tokens: int) -> None:
     example_prompts = [prompt]
 
     with VllmRunner(model,
-                    max_model_len=8192,
+                    max_model_len=4096,
                     dtype=dtype,
                     enforce_eager=False,
-                    gpu_memory_utilization=0.7) as vllm_model:
+                    gpu_memory_utilization=0.9) as vllm_model:
         vllm_model.generate_greedy(example_prompts, max_tokens)
 
 
