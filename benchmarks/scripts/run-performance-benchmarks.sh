@@ -12,7 +12,8 @@ check_npus() {
     echo "found NPU conut: $npu_count"
   fi
 
-  npu_type=$(npu-smi info | grep -E "^\| [0-9]+" | awk -F '|' '{print $2}' | awk '{$1=$1;print}' | awk '{print $2}')
+  # shellcheck disable=SC2155
+  declare -g npu_type=$(npu-smi info | grep -E "^\| [0-9]+" | awk -F '|' '{print $2}' | awk '{$1=$1;print}' | awk '{print $2}')
 
   echo "NPU type is: $npu_type"
 }
@@ -101,6 +102,16 @@ run_latency_tests() {
     echo "Running test case $test_name"
     echo "Latency command: $latency_command"
 
+    # recoding benchmarking command ang NPU command
+    jq_output=$(jq -n \
+      --arg latency "$latency_command" \
+      --arg npu "$npu_type" \
+      '{
+        latency_command: $latency,
+        npu_type: $npu
+      }')
+    echo "$jq_output" >"$RESULTS_FOLDER/$test_name.commands"
+
     # run the benchmark
     eval "$latency_command"
 
@@ -141,6 +152,16 @@ run_throughput_tests() {
 
     echo "Running test case $test_name"
     echo "Throughput command: $throughput_command"
+
+    # recoding benchmarking command ang NPU command
+    jq_output=$(jq -n \
+      --arg command "$throughput_command" \
+      --arg npu "$npu_type" \
+      '{
+        throughput_command: $command,
+        npu_type: $npu
+      }')
+    echo "$jq_output" >"$RESULTS_FOLDER/$test_name.commands"
 
     # run the benchmark
     eval "$throughput_command"
@@ -230,6 +251,19 @@ run_serving_tests() {
       echo "Client command: $client_command"
 
       bash -c "$client_command"
+
+      # record the benchmarking commands
+      jq_output=$(jq -n \
+        --arg server "$server_command" \
+        --arg client "$client_command" \
+        --arg npu "$npu_type" \
+        '{
+          server_command: $server,
+          client_command: $client,
+          npu_type: $npu
+        }')
+      echo "$jq_output" >"$RESULTS_FOLDER/${new_test_name}.commands"
+
     done
 
     # clean up
