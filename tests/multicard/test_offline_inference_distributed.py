@@ -27,6 +27,7 @@ import vllm  # noqa: F401
 
 from tests.conftest import VllmRunner
 
+os.environ["VLLM_WORKER_MULTIPROC_METHOD"] = "spawn"
 os.environ["PYTORCH_NPU_ALLOC_CONF"] = "max_split_size_mb:256"
 
 
