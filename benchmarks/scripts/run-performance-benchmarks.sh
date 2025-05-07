@@ -48,9 +48,10 @@ wait_for_server() {
   # wait for vllm server to start
   # return 1 if vllm server crashes
   timeout 1200 bash -c '
-    until curl -X POST localhost:8000/v1/completions; do
+    until curl -s -X POST localhost:8000/v1/completions || curl -s -X POST localhost:8000/v1/chat/completions; do
       sleep 1
     done' && return 0 || return 1
+  
 }
 
 get_cur_npu_id() {
@@ -270,8 +271,8 @@ main() {
 
   # prepare for benchmarking
   cd benchmarks || exit 1
-  get_benchmarks_scripts
-  trap cleanup EXIT
+  #get_benchmarks_scripts
+  #trap cleanup EXIT
 
   QUICK_BENCHMARK_ROOT=./
 
@@ -281,13 +282,12 @@ main() {
   ensure_sharegpt_downloaded
   # benchmarks
   run_serving_tests $QUICK_BENCHMARK_ROOT/tests/serving-tests.json
-  run_latency_tests $QUICK_BENCHMARK_ROOT/tests/latency-tests.json
-  run_throughput_tests $QUICK_BENCHMARK_ROOT/tests/throughput-tests.json
+  #run_latency_tests $QUICK_BENCHMARK_ROOT/tests/latency-tests.json
+  #run_throughput_tests $QUICK_BENCHMARK_ROOT/tests/throughput-tests.json
 
   END_TIME=$(date +%s)
   ELAPSED_TIME=$((END_TIME - START_TIME))
   echo "Total execution time: $ELAPSED_TIME seconds"
-
 }
 
 main "$@"
