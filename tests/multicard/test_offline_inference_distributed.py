@@ -31,18 +31,12 @@ os.environ["PYTORCH_NPU_ALLOC_CONF"] = "max_split_size_mb:256"
 os.environ["VLLM_USE_MODELSCOPE"] = "True"
 
 
-def test_model_qwen_distributed() -> None:
-    _run_test("Qwen/QwQ-32B", "mp")
-
-@pytest.mark.skipif(
-    os.environ.get("VLLM_USE_V1") == "1", 
-    reason="Not supported in v1, skipping",
-)
-def test_model_deepseek_distributed() -> None:
-    _run_test("deepseek-ai/DeepSeek-V2-Lite", "mp")
-
-
-def _run_test(model: str, distributed_executor_backend: str) -> None:
+@pytest.mark.parametrize("model, distributed_executor_backend", [
+    ("Qwen/QwQ-32B", "mp"),
+    ("deepseek-ai/DeepSeek-V2-Lite", "mp"),
+])
+def test_models_distributed(model: str,
+                            distributed_executor_backend: str) -> None:
     example_prompts = [
         "vLLM is a high-throughput and memory-efficient inference and serving engine for LLMs.",
         "Briefly describe the major milestones in the development of artificial intelligence from 1950 to 2020.",
