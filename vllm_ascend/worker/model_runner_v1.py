@@ -1337,79 +1337,69 @@ class NPUModelRunner(LoRAModelRunnerMixin):
         # modality with the max possible input tokens even when
         # it supports multiple.
 
-        if (not self.is_multimodal_model
-                or self.max_num_encoder_input_tokens <= 0
-                or self.encoder_cache_size <= 0):
-            return
+        if (self.is_multimodal_model and self.max_num_encoder_input_tokens > 0
+                and self.encoder_cache_size > 0):
 
-        max_tokens_by_modality_dict = (
-            MULTIMODAL_REGISTRY.get_max_tokens_per_item_by_nonzero_modality(
-                self.model_config))
-        dummy_data_modality, max_tokens_per_mm_item = max(
-            max_tokens_by_modality_dict.items(), key=lambda item: item[1])
+            # NOTE: Currently model is profiled with a single non-text
+            # modality with the max possible input tokens even when
+            # it supports multiple.
+            max_tokens_by_modality_dict = self.mm_registry \
+                .get_max_tokens_per_item_by_nonzero_modality(self.model_config)
+            dummy_data_modality, max_tokens_per_mm_item = max(
+                max_tokens_by_modality_dict.items(), key=lambda item: item[1])
 
-        # Check how many items of this modality can be supported by
-        # the encoder budget.
-        encoder_budget = min(self.max_num_encoder_input_tokens,
-                             self.encoder_cache_size)
+            # Check how many items of this modality can be supported by
+            # the encoder budget.
+            encoder_budget = min(self.max_num_encoder_input_tokens,
+                                 self.encoder_cache_size)
 
-        max_num_mm_items_encoder_budget = cdiv(encoder_budget,
-                                               max_tokens_per_mm_item)
+            max_num_mm_items_encoder_budget = cdiv(encoder_budget,
+                                                   max_tokens_per_mm_item)
 
-        # Check how many items of this modality can be supported by
-        # the decoder budget.
-        max_mm_items_per_req = self.mm_registry.get_mm_limits_per_prompt(
-            self.model_config)[dummy_data_modality]
+            # Check how many items of this modality can be supported by
+            # the decoder budget.
+            max_mm_items_per_req = self.mm_registry.get_mm_limits_per_prompt(
+                self.model_config)[dummy_data_modality]
 
-        # NOTE: We do not consider max_num_batched_tokens on purpose
-        # because the multimodal embeddings can be generated in advance
-        # and chunked prefilled.
-        max_num_mm_items_decoder_budget = self.max_num_reqs * \
-            max_mm_items_per_req
+            # NOTE: We do not consider max_num_batched_tokens on purpose
+            # because the multimodal embeddings can be generated in advance
+            # and chunked prefilled.
+            max_num_mm_items_decoder_budget = self.max_num_reqs * \
+                max_mm_items_per_req
 
-        max_num_mm_items = min(max_num_mm_items_encoder_budget,
-                               max_num_mm_items_decoder_budget)
+            max_num_mm_items = min(max_num_mm_items_encoder_budget,
+                                   max_num_mm_items_decoder_budget)
 
-        logger.info(
-            "Encoder cache will be initialized with a budget of %s tokens,"
-            " and profiled with %s %s items of the maximum feature size.",
-            encoder_budget, max_num_mm_items, dummy_data_modality)
+            logger.info(
+                "Encoder cache will be initialized with a budget of %s tokens,"
+                " and profiled with %s %s items of the maximum feature size.",
+                encoder_budget, max_num_mm_items, dummy_data_modality)
 
-        # Create dummy batch of multimodal inputs.
-        dummy_request_data = self.input_registry.dummy_data_for_profiling(
-            model_config=self.model_config,
-            seq_len=self.max_num_tokens,
-            mm_registry=self.mm_registry,
-        )
-        dummy_mm_data = dummy_request_data.multi_modal_data
+            # Create dummy batch of multimodal inputs.
+            dummy_mm_kwargs = self.mm_registry.get_decoder_dummy_data(
+                model_config=self.model_config,
+                seq_len=self.max_num_tokens,
+                mm_counts={
+                    dummy_data_modality: 1
+                },
+            ).multi_modal_data
 
-        if not isinstance(dummy_mm_data, MultiModalKwargs):
-            # TODO: Delete this check once input mapper is fully removed.
-            raise RuntimeError("Legacy input mapper is not supported in V1")
+            batched_dummy_mm_inputs = MultiModalKwargs.batch(
+                [dummy_mm_kwargs] * max_num_mm_items,
+                pin_memory=self.pin_memory)
+            batched_dummy_mm_inputs = MultiModalKwargs.as_kwargs(
+                batched_dummy_mm_inputs,
+                device=self.device,
+            )
 
-        # Dummy data definition in V0 may contain multiple multimodal items
-        # (e.g, multiple images) for a single request, therefore here we
-        # always replicate first item by max_num_mm_items times since in V1
-        # they are scheduled to be processed separately.
+            # Run multimodal encoder.
+            dummy_encoder_outputs = self.model.get_multimodal_embeddings(
+                **batched_dummy_mm_inputs)
 
-        dummy_mm_item = dummy_mm_data.get_item(modality=dummy_data_modality,
-                                               item_index=0)
-        dummy_mm_kwargs = MultiModalKwargs.from_items([dummy_mm_item])
-
-        batched_dummy_mm_inputs = MultiModalKwargs.batch([dummy_mm_kwargs] *
-                                                         max_num_mm_items)
-        batched_dummy_mm_inputs = MultiModalKwargs.as_kwargs(
-            batched_dummy_mm_inputs, device=self.device)
-
-        # Run multimodal encoder.
-        dummy_encoder_outputs = self.model.get_multimodal_embeddings(
-            **batched_dummy_mm_inputs)
-        assert len(dummy_encoder_outputs) == max_num_mm_items, (
-            "Expected dimension 0 of encoder outputs to match the number "
-            f"of multimodal data items: {max_num_mm_items}, got "
-            f"{len(dummy_encoder_outputs)=} instead. This is most likely "
-            "due to the 'get_multimodal_embeddings' method of the model "
-            "not implemented correctly.")
+            sanity_check_mm_encoder_outputs(
+                dummy_encoder_outputs,
+                expected_num_items=max_num_mm_items,
+            )
 
         # Cache the dummy encoder outputs.
         self.encoder_cache["tmp"] = dict(enumerate(dummy_encoder_outputs))
@@ -1506,7 +1496,7 @@ class NPUModelRunner(LoRAModelRunnerMixin):
         # current _profile_multimodal() using PyTorch SDPA backend method not
         # support for window/full attn to reduce Memcpy operations, so will cause
         # Out Of Memory problem, so we currently don't use self._profile_multimodal()
-        # self._profile_multimodal()
+        self._profile_multimodal()
 
         # For profile, have maximum num_reqs and that collectively have
         # maximum num_tokens.
