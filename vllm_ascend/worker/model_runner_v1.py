@@ -1392,7 +1392,8 @@ class NPUModelRunner(LoRAModelRunnerMixin):
                 batched_dummy_mm_inputs,
                 device=self.device,
             )
-
+            for k,v in batched_dummy_mm_inputs.items():
+                print(f"Dummy multimodal input {k} has shape {v.shape} and dtype {v.dtype}")
             # Run multimodal encoder.
             dummy_encoder_outputs = self.model.get_multimodal_embeddings(
                 **batched_dummy_mm_inputs)
