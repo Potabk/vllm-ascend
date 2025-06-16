@@ -50,7 +50,7 @@ from vllm.multimodal.utils import group_mm_inputs_by_modality
 from vllm.sampling_params import SamplingType
 from vllm.sequence import IntermediateTensors
 from vllm.utils import (STR_DTYPE_TO_TORCH_DTYPE, DeviceMemoryProfiler,
-                        LayerBlockType, LazyLoader, cdiv)
+                        LayerBlockType, LazyLoader, cdiv, is_pin_memory_available)
 from vllm.v1.core.encoder_cache_manager import compute_encoder_budget
 from vllm.v1.kv_cache_interface import (FullAttentionSpec, KVCacheConfig,
                                         KVCacheSpec)
@@ -159,6 +159,7 @@ class NPUModelRunner(LoRAModelRunnerMixin):
         self.num_attn_layers = self.model_config.get_num_layers_by_block_type(
             vllm_config.parallel_config, LayerBlockType.attention)
         self.hidden_size = self.model_config.get_hidden_size()
+        self.pin_memory = is_pin_memory_available()
         self.dtype = self.model_config.dtype
         cache_config = vllm_config.cache_config
         if cache_config.cache_dtype == "auto":
