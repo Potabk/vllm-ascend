@@ -91,8 +91,17 @@ class NPUWorker(WorkerBase):
             init_cached_hf_modules()
 
         self.profiler = self._init_profiler()
+        # Buffers saved before sleep
+        self._sleep_saved_buffers: dict[str, torch.Tensor] = {}
 
     def sleep(self, level: int = 1) -> None:
+        # Save the buffers before level 2 sleep
+        if level == 2:
+            model = self.model_runner.model
+            self._sleep_saved_buffers = {
+                name: buffer.cpu().clone()
+                for name, buffer in model.named_buffers()
+            }
         NPUPlatform.set_device(self.device)
         free_bytes_before_sleep = NPUPlatform.mem_get_info()[0]
         allocator = CaMemAllocator.get_instance()
@@ -109,6 +118,13 @@ class NPUWorker(WorkerBase):
     def wake_up(self, tags: Optional[list[str]] = None) -> None:
         allocator = CaMemAllocator.get_instance()
         allocator.wake_up(tags=tags)
+        # Restore the buffers after level 2 sleep
+        if len(self._sleep_saved_buffers):
+            model = self.model_runner.model
+            for name, buffer in model.named_buffers():
+                if name in self._sleep_saved_buffers:
+                    buffer.data.copy_(self._sleep_saved_buffers[name].data)
+            self._sleep_saved_buffers = {}
 
     def initialize_cache(self, num_gpu_blocks: int,
                          num_cpu_blocks: int) -> None:
