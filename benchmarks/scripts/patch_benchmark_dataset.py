@@ -64,6 +64,8 @@ def patch_file(path):
 
 
 if __name__ == '__main__':
+    gh_workspace = os.environ["GITHUB_WORKSPACE"]
+    dataset_path = gh_workspace + "vllm_empty/vllm/benchmarks/datasets.py"
     parser = ArgumentParser(
         description=
         "Patch benchmark_dataset.py to set streaming=False in load_dataset calls"
@@ -71,7 +73,7 @@ if __name__ == '__main__':
     parser.add_argument(
         "--path",
         type=str,
-        default="/vllm-workspace/vllm/vllm/benchmarks/datasets.py",
+        default=dataset_path,
         help="Path to the benchmark_dataset.py file")
     args = parser.parse_args()
     patch_file(args.path)
