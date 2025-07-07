@@ -83,3 +83,12 @@ def test_end_to_end():
 
     # cmp output
     assert output[0].outputs[0].text == output2[0].outputs[0].text
+
+    llm.sleep(level=2)
+    free_gpu_bytes_after_sleep, total = torch.npu.mem_get_info()
+    used_bytes = total - free_gpu_bytes_after_sleep - used_bytes_baseline
+    # now the memory usage should be less than the model weights
+    # (0.5B model, 1GiB weights)
+    assert used_bytes < 1 * GiB_bytes
+    output3 = llm.generate(prompt, sampling_params)
+    assert output[0].outputs[0].text == output2[0].outputs[0].text
