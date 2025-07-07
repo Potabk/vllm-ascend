@@ -90,5 +90,6 @@ def test_end_to_end():
     # now the memory usage should be less than the model weights
     # (0.5B model, 1GiB weights)
     assert used_bytes < 1 * GiB_bytes
+    llm.wake_up()
     output3 = llm.generate(prompt, sampling_params)
-    assert output[0].outputs[0].text == output2[0].outputs[0].text
+    assert output[0].outputs[0].text == output3[0].outputs[0].text
