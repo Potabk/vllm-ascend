@@ -129,12 +129,12 @@ jobs:
           python3 benchmarks/scripts/convert_json_to_markdown.py
 
       - name: Generate step summary
-        if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
+        if: github.event_name != 'schedule'
         run: |
           cat ./benchmarks/results/benchmark_results.md >> $GITHUB_STEP_SUMMARY
 
       - name: Upload benchmark artifacts
-        if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
+        if: github.event_name != 'schedule'
         uses: actions/upload-artifact@v4
         with:
           name: "benchmark-performance-${{ matrix.vllm_branch }}-${{ matrix.vllm_ascend_branch }}-report"
@@ -143,20 +143,26 @@ jobs:
           retention-days: 90
           overwrite: true
 
+      - name: Create pr
+        if: github.event_name == 'workflow_dispatch'
+        uses: ./.github/workflows/benchmark_submitter.yaml
+        with:
+          run_id: ${{ github.run_id }}
+
       - name: Install elastic_tool
-        if: github.event_name != 'pull_request'
+        if: github.event_name == 'schedule'
         run: |
           pip install escli-tool==0.2.3
 
       - name: Collect pr info from vllm-project/vllm-ascend
-        if: github.event_name != 'pull_request'
+        if: github.event_name == 'schedule'
         run: |
           # Only get the pull request which may influences performance
           git log --pretty=format:"%H %s" -- '**/*.py' ':!docs/*' ':!tests/*' ':!examples/*' ':!benchmarks/*' > commit_log.txt
           escli check commit_log.txt
       
       - name: Prepare benchmark script in advance
-        if: github.event_name != 'pull_request'
+        if: github.event_name == 'schedule'
         # This is for the benchmark iteration, which will change the benchmark scripts while checkouting each commit.
         # We need ensure the benchmark scripts always available.
         run: |
@@ -167,7 +173,7 @@ jobs:
       - name: Run benchmark iteration
         env:
           PIP_EXTRA_INDEX_URL: https://mirrors.huaweicloud.com/ascend/repos/pypi
-        if: github.event_name != 'pull_request'
+        if: github.event_name == 'schedule'
         run: |
           while IFS= read -r line || [[ -n "$line" ]]; do
             commit_id=${line%% *}

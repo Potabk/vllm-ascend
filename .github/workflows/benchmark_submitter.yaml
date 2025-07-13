@@ -1,0 +1,82 @@
+name: benchmark-sumitter
+
+on:
+  workflow_call:
+    inputs:
+      run_id:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+jobs:
+  create_pr:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    env:
+      UPSTREAM_REPO: vllm-project/vllm-ascend
+    steps:
+      - name: Install dependencies
+        run: |
+          apt-get update -y
+          apt-get install -y git
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          repository: vllm-ascend-ci/vllm-ascend
+          token: ${{ secrets.PAT_TOKEN }}
+          ref: main
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/${{ env.UPSTREAM_REPO }}.git
+          git fetch upstream
+          git remote -v
+
+      - name: Set Git user info dynamically
+        run: |
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+
+      - name: Create or switch to branch
+        run: |
+          TIMESTAMP=$(date +%Y%m%d%H%M%S)
+          BRANCH_NAME="auto-pr/performance-report-${TIMESTAMP}"
+          echo "BRANCH_NAME=${BRANCH_NAME}" >> $GITHUB_ENV
+          git checkout -B "${BRANCH_NAME}" upstream/${{ github.event.inputs.vllm-ascend-version }}
+
+      - name: Download only current run reports
+        uses: actions/download-artifact@v4
+        with:
+          path: ./benchmarks/results
+          pattern: benchmark-*
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.run_id }}
+
+      - name: push accuracy report
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          git add ./docs/source/developer_guide/evaluation/accuracy_report/*.md
+          git commit -s -m "[Doc] Update accuracy reports for ${{ github.event.inputs.vllm-ascend-version }}"
+          git push -f origin "${{ env.BRANCH_NAME }}"
+
+      - name: Create PR in upstream via API
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.PAT_TOKEN }}
+          script: |
+            const pr = await github.rest.pulls.create({
+              owner: 'vllm-project',
+              repo: 'vllm-ascend',
+              head: `vllm-ascend-ci:${{ env.BRANCH_NAME }}`,
+              base: '${{ github.event.inputs.vllm-ascend-version }}',
+              title: `[Doc] Performance benchmark reports for ${{ github.event.inputs.vllm-ascend-version }}`,
+              body: `The performance results running on NPU Altlas A2 have changed, updating reports for:
+            - [Workflow run][1]
+
+            [1]: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ inputs.run_id }}`
+            });
+            core.info(`Created PR #${pr.data.number}`);
+ 
