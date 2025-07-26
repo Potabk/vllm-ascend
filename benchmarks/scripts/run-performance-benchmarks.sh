@@ -75,12 +75,14 @@ get_cur_npu_id() {
 }
 
 kill_npu_processes() {
-  ps -aux
-  lsof -t -i:8000 | xargs -r kill -9
-  pgrep python3 | xargs -r kill -9
-  
-  sleep 4
-  rm -rf ~/.config/vllm
+  pkill -f '[p]ython'
+  pkill -f '[p]ython3'
+  pkill -f '[t]ritonserver'
+  pkill -f '[p]t_main_thread'
+  pkill -f '[t]ext-generation'
+  pkill -f '[l]mdeploy'
+  # vLLM now names the process with VLLM prefix after https://github.com/vllm-project/vllm/pull/21445
+  pkill -f '[V]LLM'
 
 }
 
