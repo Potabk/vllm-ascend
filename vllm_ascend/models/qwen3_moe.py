@@ -39,7 +39,6 @@ from vllm.model_executor.models.utils import (
     maybe_prefix)
 from vllm.sequence import IntermediateTensors
 
-from vllm_ascend.ops.fused_moe import AscendSparseMoeBlock
 from vllm_ascend.ops.sequence_parallel import (MetadataForPadding,
                                                init_metadata_for_sp)
 from vllm.config import CacheConfig, CompilationLevel, VllmConfig
@@ -166,9 +165,6 @@ class AscendQwen3MoeDecoderLayer(nn.Module):
         if (layer_idx not in mlp_only_layers) and (
                 config.num_experts > 0 and
             (layer_idx + 1) % config.decoder_sparse_step == 0):
-            self.mlp = AscendSparseMoeBlock(config=config,
-                                            quant_config=quant_config,
-                                            prefix=f"{prefix}.mlp")
             if not use_aclgraph:
                 # FIXME: custom sparse moe block doesn't work with aclgraph.
                 self.mlp = CustomSparseMoeBlock(config=config,
