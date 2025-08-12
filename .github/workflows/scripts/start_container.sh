@@ -1,5 +1,4 @@
 #!/bin/bash
-sudo chmod a+rw /var/run/docker.sock
 IMAGE_NAME="quay.nju.edu.cn/ascend/cann:8.2.rc1-a3-ubuntu22.04-py3.11"
 sudo docker pull $IMAGE_NAME
 
@@ -42,7 +41,7 @@ docker run -itd \
     --device /dev/davinci_manager \
     --device /dev/devmm_svm \
     --device /dev/hisi_hdc \
-    -e GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
+    -v $GITHUB_WORKSPACE=/root/workspace \
     -v /usr/local/dcmi:/usr/local/dcmi \
     -v /usr/local/Ascend/driver/tools/hccn_tool:/usr/local/Ascend/driver/tools/hccn_tool \
     -v /usr/local/bin/npu-smi:/usr/local/bin/npu-smi \
