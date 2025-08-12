@@ -14,6 +14,7 @@ export WORKSPACE="/root/workspace"
 
 cd $WORKSPACE
 # install dependencies
+apt-get update -y
 apt-get -y install `cat packages.txt`
 apt-get -y install gcc g++ cmake libnuma-dev
 
