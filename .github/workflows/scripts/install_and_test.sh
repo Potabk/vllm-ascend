@@ -2,7 +2,7 @@
 
 ENV_FILE="/root/actions-runner/.cache/set_env.sh"
 
-docker exec -it ascend_ci_a3 bash -c "source $ENV_FILE && exec bash"
+docker exec -i ascend_ci_a3 bash -lc "source $ENV_FILE && exec bash"
 
 if [ $? -ne 0 ]; then
     echo "Failed to execute command in the container. Please check if the container is running."

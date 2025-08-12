@@ -42,6 +42,7 @@ docker run -itd \
     --device /dev/davinci_manager \
     --device /dev/devmm_svm \
     --device /dev/hisi_hdc \
+    -e GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
     -v /usr/local/dcmi:/usr/local/dcmi \
     -v /usr/local/Ascend/driver/tools/hccn_tool:/usr/local/Ascend/driver/tools/hccn_tool \
     -v /usr/local/bin/npu-smi:/usr/local/bin/npu-smi \
