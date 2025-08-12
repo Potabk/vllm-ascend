@@ -19,10 +19,6 @@ name: 'Multi-Node-Test'
 # This workflow runs nightly benchmarks for vllm-ascend.
 
 on:
-  schedule:
-    # Run at 20:00 (UTC+8)
-    - cron: "0 12 * * *"
-
   workflow_dispatch:
     # Allow manual triggering of the workflow
 
@@ -34,40 +30,26 @@ defaults:
   run:
     shell: bash -el {0}
 
-
 jobs:
   test_dp:
     # Currently, we run multi-node tests only on: vllm==main, vllm-ascend==main.
     name: 'Multi-Node-Test / DP'
     strategy:
         matrix:
-            runner: [linux-aarch64-a3-node0, linux-aarch64-a3-node1]
+          runner: [linux-aarch64-a3-node0, linux-aarch64-a3-node1]
     runs-on: ${{matrix.runner}}
-    container:
-      image: quay.nju.edu.cn/ascend/cann:8.2.rc1-a3-ubuntu22.04-py3.11
-      volumes:
-        - /var/run/docker.sock:/var/run/docker.sock
+    env:
+      CONTAINER_NAME: ascend_ci_a3
+      ENV_FILE: /home/.cache/set_env.sh
     steps:
       - name: Check npu and CANN info
         run: |
           npu-smi info
           cat /usr/local/Ascend/ascend-toolkit/latest/"$(uname -i)"-linux/ascend_toolkit_install.info
-
-      - name: Config mirrors
-        run: |
-          # keep using tuna's proxy since linux-arm64-npu-static-8 is in another region
-          sed -i 's|ports.ubuntu.com|mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list
-          pip config set global.index-url https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple
-
-      - name: Setup proxy
-        run: |
-          git config --global url."https://ghfast.top/https://github.com/".insteadOf "https://github.com/"
-
       - name: Checkout vllm-ascend
         uses: actions/checkout@v4
         with:
-          respository: vllm-project/vllm-ascend
-          ref: main
+          ref: multi_node_ci
           path: ./
 
       - name: Checkout vllm
@@ -77,13 +59,50 @@ jobs:
           ref: main
           path: ./vllm-empty
 
-      - name: Install vllm-project/vllm from source
-        working-directory: ./vllm-empty
+      - name: Start container
         run: |
-          VLLM_TARGET_DEVICE=empty pip install -e .
+          bash .github/workflows/scripts/start_container.sh
+
+      - name: Get header node IP
+        id: get_header_node_ip
+        if: ${{ matrix.runner == 'linux-aarch64-a3-node0' }}
+        run: |
+          echo "header_node_ip=$(hostname -I)" >> $GITHUB_ENV
+          echo "Header node IP: $header_node_ip"
+
+      - name: verify
+        run: |
+          echo "Header node IP: ${{ env.header_node_ip }}"
+
+      - name: Run multi-node test
+        run: |
+          if [ "${matrix.runner}" == "linux-aarch64-a3-node0" ]; then
+            docker exec -i $CONTAINER_NAME bash -lc "
+            source '$ENV_FILE'
+            bash /root/workspace/.github/workflows/scripts/install_and_test.sh header"
+          else
+            docker exec -i $CONTAINER_NAME bash -lc "
+            source '$ENV_FILE'
+            bash /root/workspace/.github/workflows/scripts/install_and_test.sh worker"
+          fi
+
+          if [ $? -ne 0 ]; then
+            echo "Failed to execute command in the container. Please check if the container is running."
+            exit 1
+          fi
+
+      - name: Docker post test cleanup
+        if: always()
+        run: |
+          docker rm -f ascend_ci_a3 2>/dev/null || true
+
+      # - name: Install vllm-project/vllm from source
+      #   working-directory: ./vllm-empty
+      #   run: |
+      #     VLLM_TARGET_DEVICE=empty pip install -e .
   
-      - name: Install vllm-project/vllm-ascend
-        env:
-          PIP_EXTRA_INDEX_URL: https://mirrors.huaweicloud.com/ascend/repos/pypi
-        run: |
-          pip install -e .
+      # - name: Install vllm-project/vllm-ascend
+      #   env:
+      #     PIP_EXTRA_INDEX_URL: https://mirrors.huaweicloud.com/ascend/repos/pypi
+      #   run: |
+      #     pip install -e .
