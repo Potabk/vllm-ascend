@@ -13,7 +13,7 @@ export PIP_EXTRA_INDEX_URL=https://mirrors.huaweicloud.com/ascend/repos/pypi
 export WORKSPACE="/root/workspace"
 
 cd $WORKSPACE
-# install dependencies
+# install sys dependencies
 apt-get update -y
 apt-get -y install `cat packages.txt`
 apt-get -y install gcc g++ cmake libnuma-dev
@@ -26,5 +26,4 @@ VLLM_TARGET_DEVICE=empty pip install -e .
 cd $WORKSPACE
 pip install -e .
 
-# show
-pip list | grep vllm
+
