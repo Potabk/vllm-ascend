@@ -226,6 +226,31 @@ class NPUPlatform(Platform):
         if not is_310p():
             compilation_config.custom_ops = ["all"]
 
+        decoding_config = vllm_config.decoding_config
+        scheduler_config = vllm_config.scheduler_config
+        ascend_scheduler_config = ascend_config.ascend_scheduler_config
+
+        if model_config is not None and not model_config.use_mla:
+            logger.info(
+                "Non-MLA LLMs forcibly disable the chunked prefill feature, "
+                "as the performance of operators supporting this functionality "
+                "is currently suboptimal.")
+            # Disable chunked prefill for non-MLA models when the following conditions are met:
+            if (not model_config.is_multimodal_model
+                    and decoding_config.backend == "auto"
+                    and scheduler_config.delay_factor <= 0
+                    and not scheduler_config.send_delta_data
+                    and scheduler_config.policy == "fcfs"
+                    and scheduler_config.num_scheduler_steps == 1):
+                scheduler_config.enable_chunked_prefill = False
+                scheduler_config.chunked_prefill_enabled = False
+                ascend_scheduler_config.enabled = True
+                if hasattr(ascend_scheduler_config, "enable_chunked_prefill"):
+                    ascend_scheduler_config.enable_chunked_prefill = False
+
+            if scheduler_config.max_num_batched_tokens < scheduler_config.max_model_len:
+                scheduler_config.max_num_batched_tokens = scheduler_config.max_model_len
+
         # If ascend_scheduler_config is enabled,
         # extents original scheduler_config to use AscendScheduler.
         if ascend_config.ascend_scheduler_config.enabled:
