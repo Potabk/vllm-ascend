@@ -85,4 +85,4 @@ async def test_models(model: str, tp_size: int, pp_size: int,
             except Exception as e:
                 results.append(e)
 
-        return results
+        print(results)
