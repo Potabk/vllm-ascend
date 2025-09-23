@@ -14,9 +14,8 @@
 # limitations under the License.
 # This file is a part of the vllm-ascend project.
 #
-from typing import Any
+import asyncio
 
-import openai
 import pytest
 import pytest_asyncio
 
@@ -65,16 +64,24 @@ async def test_models(model: str, tp_size: int, pp_size: int,
         "--distributed-executor-backend", distributed_executor_backend,
         "--gpu-memory-utilization", 0.7
     ]
-    for prompt in prompts:
-        request_keyword_args: dict[str, Any] = {
-            **api_keyword_args,
-        }
-        with RemoteOpenAIServer(model, server_args) as server:
-            client = server.get_async_client()
-            batch = await client.completions.create(
-                model=model,
-                prompt=prompt,
-                **request_keyword_args,
-            )
-            choices: openai.types.CompletionChoice = batch.choices
-            print(choices)
+    with RemoteOpenAIServer(model, server_args) as server:
+        chat_input = [{"role": "user", "content": "Write a long story"}]
+        client = server.get_async_client()
+        tasks = [
+            asyncio.create_task(
+                client.chat.completions.create(
+                    messages=chat_input,
+                    model=model,
+                    max_tokens=64,
+                )) for _ in range(200)
+        ]
+
+        results = []
+        for future in asyncio.as_completed(tasks):
+            try:
+                result = await future
+                results.append(result)
+            except Exception as e:
+                results.append(e)
+
+        return results
