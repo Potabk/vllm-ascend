@@ -42,6 +42,8 @@ from vllm.model_executor.models.qwen2_5_vl import (
 from vllm.model_executor.models.utils import maybe_prefix
 from vllm.multimodal import MULTIMODAL_REGISTRY
 
+from vllm_ascend.models.qwen2_5_vl_without_padding import AscendQwen2_5_VLForConditionalGeneration_Without_Padding  # type: ignore
+
 MIN_PAD_SIZE = 64  # min_size to pad weight
 MAX_PAD_SIZE = 128  # max_size to pad weight
 

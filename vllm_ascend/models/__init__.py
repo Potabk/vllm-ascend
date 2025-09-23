@@ -16,7 +16,7 @@ def register_model():
     else:
         ModelRegistry.register_model(
             "Qwen2_5_VLForConditionalGeneration",
-            "vllm_ascend.models.qwen2_5_vl_without_padding:AscendQwen2_5_VLForConditionalGeneration_Without_Padding"
+            "vllm_ascend.models.qwen2_5_vl:AscendQwen2_5_VLForConditionalGeneration_Without_Padding"
         )
 
     ModelRegistry.register_model(
