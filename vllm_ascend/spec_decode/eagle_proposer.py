@@ -21,6 +21,7 @@ from vllm_ascend.attention.attention_mask import AttentionMaskBuilder
 from vllm_ascend.attention.attention_v1 import AscendAttentionState
 from vllm_ascend.attention.utils import AscendCommonAttentionMetadata
 from vllm_ascend.spec_decode.interface import Proposer, SpecDcodeType
+from vllm_ascend.worker.model_runner_v1 import NPUModelRunner
 
 PADDING_SLOT_ID = -1
 
@@ -30,7 +31,7 @@ class EagleProposer(Proposer):
     def __init__(self,
                  vllm_config: VllmConfig,
                  device: torch.device,
-                 runner=None):
+                 runner: NPUModelRunner = None):
         self.name = SpecDcodeType.EAGLE if vllm_config.speculative_config.method == "eagle" else SpecDcodeType.EAGLE3
         self.vllm_config = vllm_config
         self.device = device

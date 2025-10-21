@@ -78,7 +78,7 @@ def batch_prompt_inference(llm: LLM, tokenizer: PreTrainedTokenizer,
 
 
 def main():
-    model_name = "meta-llama/Llama-3.2-1B-Instruct"
+    model_name = "LLM-Research/Llama-3.2-1B-Instruct"
     tokenizer, embedding_layer, llm = init_tokenizer_and_llm(model_name)
     single_prompt_inference(llm, tokenizer, embedding_layer)
     batch_prompt_inference(llm, tokenizer, embedding_layer)

@@ -304,11 +304,14 @@ class NPUModelRunner(LoRAModelRunnerMixin):
 
         self.is_multimodal_model = self.model_config.is_multimodal_model
         self.is_pooling_model = self.model_config.pooler_config is not None
-        if self.is_multimodal_model:
-            self.inputs_embeds = torch.zeros(
-                (self.max_num_tokens, self.model_config.get_hidden_size()),
-                dtype=self.dtype,
-                device=self.device)
+        self.enable_prompt_embeds = self.model_config.enable_prompt_embeds
+        self.is_token_ids = torch.zeros((self.max_num_tokens, ),
+                                        dtype=torch.bool,
+                                        device=self.device)
+        self.inputs_embeds = torch.zeros(
+            (self.max_num_tokens, self.model_config.get_hidden_size()),
+            dtype=self.dtype,
+            device=self.device)
         # Set up Attention
         self.use_sparse = hasattr(self.vllm_config.model_config.hf_config,
                                   "index_topk")
@@ -643,6 +646,7 @@ class NPUModelRunner(LoRAModelRunnerMixin):
             self.requests[req_id] = CachedRequestState(
                 req_id=req_id,
                 prompt_token_ids=new_req_data.prompt_token_ids,
+                prompt_embeds=new_req_data.prompt_embeds,
                 sampling_params=sampling_params,
                 pooling_params=pooling_params,
                 generator=generator,
@@ -1113,6 +1117,9 @@ class NPUModelRunner(LoRAModelRunnerMixin):
             self.input_ids[:total_num_scheduled_tokens].copy_(
                 self.input_ids_cpu[:total_num_scheduled_tokens],
                 non_blocking=True)
+            if self.enable_prompt_embeds:
+                self.inputs_embeds.copy_to_gpu(total_num_scheduled_tokens)
+                self.is_token_ids.copy_to_gpu(total_num_scheduled_tokens)
             return
 
         # Async scheduling case, where some decode requests from the previous
