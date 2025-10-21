@@ -343,20 +343,36 @@ class TestAscendMLAImpl(TestBase):
         self.assertEqual(self.impl.num_queries_per_kv, 32)
         self.assertEqual(self.impl.tp_size, 2)
 
-    def test_v_up_proj(self):
+    @patch("torch_npu.npu_transpose_batchmatmul")
+    def test_v_up_proj(self, mock_npu_mm):
+
+        def fake_npu_transpose_batchmatmul(x, w, perm_x1, perm_x2, perm_y):
+            x = x.permute(*perm_x1)
+            w = w.permute(*perm_x2)
+            y = torch.einsum("bhr,hrd->bhd", x, w)
+            y = y.permute(*perm_y)
+            return y
+
+        mock_npu_mm.side_effect = fake_npu_transpose_batchmatmul
+
         batch_size = 4
         x = torch.randn(batch_size, self.impl.num_heads,
                         self.impl.kv_lora_rank)
+        self.impl.W_UV = torch.randn(self.impl.num_heads,
+                                     self.impl.kv_lora_rank,
+                                     self.impl.v_head_dim)
 
-        if not hasattr(self.impl, 'W_UV') or self.impl.W_UV is None:
-            self.impl.W_UV = torch.randn(self.impl.num_heads,
-                                         self.impl.kv_lora_rank,
-                                         self.impl.v_head_dim)
         result = self.impl._v_up_proj(x)
 
-        self.assertEqual(result.shape[0], batch_size)
-        self.assertEqual(result.shape[1],
-                         self.impl.num_heads * self.impl.v_head_dim)
+        self.assertEqual(
+            result.shape,
+            (batch_size, self.impl.num_heads * self.impl.v_head_dim))
+
+        mock_npu_mm.assert_called_once()
+
+        expected = torch.einsum("bhr,hrd->bhd", x,
+                                self.impl.W_UV).reshape(batch_size, -1)
+        torch.testing.assert_close(result, expected, rtol=1e-4, atol=1e-4)
 
     def test_q_proj_and_k_up_proj(self):
         batch_size = 4
