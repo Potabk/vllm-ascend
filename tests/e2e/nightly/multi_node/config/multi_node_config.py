@@ -253,6 +253,8 @@ class MultiNodeConfig:
         ranktable_gen_path = self.disaggregated_prefill.get(
             "ranktable_gen_path")
         ranktable_path = self.disaggregated_prefill.get("ranktable_path")
+        if os.path.exists(ranktable_path):
+            return
 
         local_host = self.cur_ip
 
@@ -274,9 +276,9 @@ class MultiNodeConfig:
             "--local-host",
             local_host,
             "--prefill-device-cnt",
-            str(self.npu_per_node),
+            str(self.npu_per_node * self.num_prefillers),
             "--decode-device-cnt",
-            str(self.npu_per_node),
+            str(self.npu_per_node * self.num_decoders),
         ]
 
         env = os.environ.copy()
