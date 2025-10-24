@@ -53,11 +53,11 @@ class MultiNodeConfig:
         assert perf_cmd is not None, "perf_cmd must be provided"
         assert acc_cmd is not None, "acc_cmd must be provided"
 
-        self.cur_index = os.getenv("LWS_WORKER_INDEX", 0)
+        self.cur_index = int(os.getenv("LWS_WORKER_INDEX", 0))
         self.cur_ip = get_cur_ip()
         self.nic_name = get_net_interface(self.cur_ip)
         self.cluster_ips = get_cluster_ips(self.num_nodes)
-        self.cur_node_info: NodeInfo = self.nodes_info[int(self.cur_index)]
+        self.cur_node_info: NodeInfo = self.nodes_info[self.cur_index]
         self.disaggregated_prefill = disaggregated_prefill
         self._init_disaggregated_prefill()
 
@@ -241,7 +241,7 @@ class MultiNodeConfig:
 
     @property
     def is_master(self):
-        return int(self.cur_index) == 0
+        return self.cur_index == 0
 
     def _gen_ranktable(self):
         cluster_ip = self.cluster_ips
