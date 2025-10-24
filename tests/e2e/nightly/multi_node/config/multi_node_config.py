@@ -67,11 +67,12 @@ class MultiNodeConfig:
 
     def _init_disaggregated_prefill(self):
         if self.disaggregated_prefill:
-            self.decode_start_index: list[
-                int] = self.disaggregated_prefill.get("decoder_host_index")
-            if not self.decode_start_index:
-                raise RuntimeError("got empty decode_start_index")
-            self.num_prefillers = self.decode_start_index[0]
+            decode_host_index = self.disaggregated_prefill.get(
+                "decoder_host_index")
+            if not decode_host_index:
+                raise RuntimeError("got empty decode_host_index")
+            self.decode_start_index: int = decode_host_index[0]
+            self.num_prefillers = self.decode_start_index
             self.num_decoders = self.num_nodes - self.num_prefillers
             if self.disaggregated_prefill.get(
                     "ranktable_gen_path") is not None:
@@ -93,7 +94,7 @@ class MultiNodeConfig:
                 self.envs["MASTER_IP"] = self.cluster_ips[0]
             else:
                 self.envs["MASTER_IP"] = self.cluster_ips[
-                    self.decode_start_index[0]]
+                    self.decode_start_index]
 
         ascend_path = "/usr/local/Ascend/ascend-toolkit/latest/python/site-packages"
         self.envs[
@@ -284,3 +285,8 @@ class MultiNodeConfig:
         print(cmd)
         subprocess.run(cmd, env=env, check=True)
         assert os.path.exists(ranktable_path), "failed generate ranktable.json"
+
+
+if __name__ == '__main__':
+    config = MultiNodeConfig.from_yaml()
+    print(config.server_cmd)
