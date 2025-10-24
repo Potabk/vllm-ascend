@@ -274,9 +274,9 @@ class MultiNodeConfig:
             "--local-host",
             local_host,
             "--prefill-device-cnt",
-            str(self.num_prefillers),
+            str(self.npu_per_node),
             "--decode-device-cnt",
-            str(self.num_decoders),
+            str(self.npu_per_node),
         ]
 
         env = os.environ.copy()
