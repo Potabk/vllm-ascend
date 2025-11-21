@@ -18,7 +18,7 @@ check_npus() {
 }
 
 ensure_sharegpt_downloaded() {
-  local FILE="/github/home/.cache/datasets/ShareGPT_V3_unfiltered_cleaned_split.json"
+  local FILE="/root/.cache/datasets/ShareGPT_V3_unfiltered_cleaned_split.json"
   local DIR
   DIR=$(dirname "$FILE")
 

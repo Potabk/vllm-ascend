@@ -43,35 +43,22 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  test:
-    if: ${{ contains(github.event.pull_request.labels.*.name, 'performance-test') && contains(github.event.pull_request.labels.*.name, 'ready-for-test') || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
-
-    name: Benchmarks/vLLM=${{ matrix.vllm_branch }}, vLLM-Ascend=${{ matrix.vllm_ascend_branch }}
-    runs-on: 'linux-arm64-npu-static-8'
+  perf-nightly:
+    name: performance-nightly-${{ matrix.vllm_branch }}-${{ matrix.vllm_ascend_branch }}
+    runs-on: linux-aarch64-a2-1
+    container:
+      image: swr.cn-southwest-2.myhuaweicloud.com/base_image/ascend-ci/cann:8.3.rc1-910b-ubuntu22.04-py3.11
+      env:
+        VLLM_USE_MODELSCOPE: True
+        ES_OM_DOMAIN: ${{ secrets.ES_OM_DOMAIN }}
+        ES_OM_AUTHORIZATION: ${{ secrets.ES_OM_AUTHORIZATION }}
+        DATASET_PATH: /root/.cache/datasets/ShareGPT_V3_unfiltered_cleaned_split.json
     strategy:
       matrix:
         include:
           - vllm_branch: v0.11.0
             vllm_ascend_branch: main
       max-parallel: 1
-    container:
-      image: swr.cn-southwest-2.myhuaweicloud.com/base_image/ascend-ci/cann:8.3.rc1-910b-ubuntu22.04-py3.11
-      volumes:
-        - /usr/local/dcmi:/usr/local/dcmi
-        - /usr/local/bin/npu-smi:/usr/local/bin/npu-smi
-        - /usr/local/Ascend/driver/:/usr/local/Ascend/driver/
-        # Use self-host cache speed up pip and model download
-        - /home/action/.cache:/github/home/.cache/
-      options: >-
-        --device /dev/davinci0
-        --device /dev/davinci1
-        --device /dev/davinci_manager
-        --device /dev/devmm_svm
-        --device /dev/hisi_hdc
-      env:
-        VLLM_USE_MODELSCOPE: True
-        ES_OM_DOMAIN: ${{ secrets.ES_OM_DOMAIN }}
-        ES_OM_AUTHORIZATION: ${{ secrets.ES_OM_AUTHORIZATION }}
     steps:
       - name: Check npu and CANN info
         run: |
@@ -88,11 +75,6 @@ jobs:
         run: |
           apt-get update -y
           apt-get -y install git jq wget curl lsof gcc g++ cmake libnuma-dev
-
-      - name: Config git
-        run: |
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          git config --global url."https://gh-proxy.test.osinfra.cn/https://github.com/".insteadOf https://github.com/
 
       - name: Checkout vllm-project/vllm-ascend repo
         uses: actions/checkout@v4
@@ -115,7 +97,6 @@ jobs:
         env:
           PIP_EXTRA_INDEX_URL: https://mirrors.huaweicloud.com/ascend/repos/pypi
         run: |
-          pip install -r requirements-dev.txt
           pip install -v -e .
           pip install -r benchmarks/requirements-bench.txt
 
@@ -154,15 +135,15 @@ jobs:
           # Only get the pull request which may influences performance
           git log --pretty=format:"%H %s" -- '**/*.py' ':!docs/*' ':!tests/*' ':!examples/*' ':!benchmarks/*' > commit_log.txt
           escli check commit_log.txt
-      
+
       - name: Prepare benchmark script in advance
         if: github.event_name != 'pull_request'
         # This is for the benchmark iteration, which will change the benchmark scripts while checkouting each commit.
         # We need ensure the benchmark scripts always available.
         run: |
           # Prepare the benchmark script in advance
-          mkdir -p /github/home/benchmarks
-          cp -r benchmarks/* /github/home/benchmarks/
+          mkdir -p latest_benchmarks
+          cp -r benchmarks/* ./latest_benchmarks/
 
       - name: Run benchmark iteration
         env:
@@ -186,9 +167,9 @@ jobs:
             echo "vllm-ascend branch: ${{ matrix.vllm_ascend_branch }}"
             echo "------------------------"
 
-            cd /github/home
+            cd ./latest_benchmarks
             ERROR_MSG=""
-            if ! bash benchmarks/scripts/run-performance-benchmarks.sh; then
+            if ! bash scripts/run-performance-benchmarks.sh; then
               ERROR_MSG="Benchmark failed to run"
             fi
             # send the result to es
