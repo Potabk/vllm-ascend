@@ -72,7 +72,7 @@ jobs:
         vllm_version: [v0.11.2]
     needs: [changes]
     if: ${{ needs.changes.outputs.e2e_tracker == 'true' }}
-    uses: ./.github/workflows/_e2e_test.yaml
+    uses: .github/workflows/workflow_on_call/_e2e_test.yaml
     with:
       vllm: ${{ matrix.vllm_version }}
       runner: linux-aarch64-a2
