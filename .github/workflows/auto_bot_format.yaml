@@ -15,7 +15,7 @@
 # This file is a part of the vllm-ascend project.
 #
 
-name: format / pr body
+name: Audo Bot / Format Pr Body
 
 on:
   # The PR updated when PR opened and push new commits
@@ -28,8 +28,8 @@ permissions:
   pull-requests: write
 
 jobs:
-  update-description:
-    name: update vLLM version
+  auto_bot_format:
+    name: auto bot format pr body
     runs-on: ubuntu-latest
 
     steps:

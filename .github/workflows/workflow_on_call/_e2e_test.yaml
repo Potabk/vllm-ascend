@@ -1,4 +1,4 @@
-name: 'e2e test'
+name: On Call / e2e Tests
 
 on:
   workflow_call:
@@ -17,8 +17,8 @@ on:
         type: string
 
 jobs:
-  e2e:
-    name: singlecard
+  on_call_e2e_1_card:
+    name: on call e2e on 1 card
     runs-on: ${{ inputs.runner }}-1
     container:
       image: ${{ inputs.image }}
@@ -67,7 +67,7 @@ jobs:
           pip install -r requirements-dev.txt
           pip install -v -e .
 
-      - name: Run vllm-project/vllm-ascend test
+      - name: Run vllm-project/vllm-ascend test (light, 1 card)
         env:
           VLLM_WORKER_MULTIPROC_METHOD: spawn
           VLLM_USE_MODELSCOPE: True
@@ -78,7 +78,7 @@ jobs:
           # pytest -sv tests/e2e/singlecard/test_quantization.py
           pytest -sv tests/e2e/singlecard/test_vlm.py::test_multimodal_vl
 
-      - name: Run e2e test
+      - name: Run vllm-project/vllm-ascend test (full, 1 card)
         env:
           VLLM_WORKER_MULTIPROC_METHOD: spawn
           VLLM_USE_MODELSCOPE: True
@@ -111,8 +111,8 @@ jobs:
           # Fix me: test_eagle_correctness OOM error
           pytest -sv tests/e2e/singlecard/spec_decode_v1/test_v1_spec_decode.py
 
-  e2e-2-cards:
-    name: multicard-2
+  on_call_e2e_2_cards:
+    name: on call e2e on 2 cards
     runs-on: ${{ inputs.runner }}-2
     container:
       image: ${{ inputs.image }}
@@ -161,7 +161,7 @@ jobs:
           pip install -r requirements-dev.txt
           pip install -v -e .
 
-      - name: Run vllm-project/vllm-ascend test (light)
+      - name: Run vllm-project/vllm-ascend test (light, 2 cards)
         env:
           VLLM_WORKER_MULTIPROC_METHOD: spawn
           VLLM_USE_MODELSCOPE: True
@@ -173,7 +173,7 @@ jobs:
           pytest -sv tests/e2e/multicard/test_torchair_graph_mode.py::test_e2e_deepseekv2lite_with_torchair_v1scheduler
           pytest -sv tests/e2e/multicard/test_torchair_graph_mode.py::test_e2e_deepseekv2lite_with_nz
 
-      - name: Run vllm-project/vllm-ascend test (full)
+      - name: Run vllm-project/vllm-ascend test (full, 2 cards)
         env:
           VLLM_WORKER_MULTIPROC_METHOD: spawn
           VLLM_USE_MODELSCOPE: True
@@ -205,9 +205,9 @@ jobs:
           pytest -sv tests/e2e/multicard/test_prefix_caching.py
           pytest -sv tests/e2e/multicard/test_qwen3_moe.py
 
-  e2e-4-cards:
-    name: multicard-4
-    needs: [e2e, e2e-2-cards]
+  on_call_e2e_4_cards:
+    name: on call e2e on 4 cards
+    needs: [on_call_e2e_1_card, on_call_e2e_2_cards]
     if: ${{ needs.e2e.result == 'success' && needs.e2e-2-cards.result == 'success' && inputs.type == 'full' }}
     runs-on: linux-aarch64-a3-4
     container:
@@ -259,7 +259,7 @@ jobs:
           pip install -r requirements-dev.txt
           pip install -v -e .
 
-      - name: Run vllm-project/vllm-ascend test for V1 Engine
+      - name: Run vllm-project/vllm-ascend test (4 cards))
         working-directory: ./vllm-ascend
         env:
           VLLM_WORKER_MULTIPROC_METHOD: spawn
@@ -280,7 +280,7 @@ jobs:
           . /usr/local/Ascend/8.3.RC1/bisheng_toolkit/set_env.sh
           python3 -m pip install "https://vllm-ascend.obs.cn-north-4.myhuaweicloud.com/vllm-ascend/triton_ascend-3.2.0.dev20250914-cp311-cp311-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl"
 
-      - name: Run vllm-project/vllm-ascend Qwen3 Next test
+      - name: Run vllm-project/vllm-ascend teset (Qwen3-Next)
         working-directory: ./vllm-ascend
         shell: bash -el {0}
         env:

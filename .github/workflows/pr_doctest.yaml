@@ -15,7 +15,7 @@
 # This file is a part of the vllm-ascend project.
 #
 
-name: 'ascend test / doctest'
+name: PR / Doc Test
 
 on:
   workflow_dispatch:
@@ -41,13 +41,13 @@ defaults:
     shell: bash -el {0}
 
 jobs:
-  test:
+  pr_doctest:
+    name: doc tests for PR
     strategy:
       # Each version should be tested
       fail-fast: false
       matrix:
         vllm_verison: [v0.9.1-dev, v0.9.1-dev-openeuler, main, main-openeuler]
-    name: vLLM Ascend test
     runs-on: linux-aarch64-a2-1
     container:
       image: swr.cn-southwest-2.myhuaweicloud.com/base_image/ascend-ci/vllm-ascend:${{ matrix.vllm_verison }}
@@ -68,7 +68,7 @@ jobs:
       - name: Checkout vllm-project/vllm-ascend repo
         uses: actions/checkout@v6
 
-      - name: Run vllm-ascend/tests/e2e/run_doctests.sh
+      - name: Run doctest for vllm-ascend
         run: |
           # PWD: /__w/vllm-ascend/vllm-ascend
           # Make sure e2e tests are latest

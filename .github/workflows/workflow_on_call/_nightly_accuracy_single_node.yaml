@@ -15,7 +15,7 @@
 # This file is a part of the vllm-ascend project.
 #
 
-name: 'e2e nightly models test'
+name: On Call / Nightly / Accuracy / Single Node Tests
 
 on:
   workflow_call:
@@ -55,7 +55,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  e2e-nightly:
+  on_call_nightly_e2e_single_node:
     name: ${{inputs.model_list}} accuracy test
     runs-on: ${{ inputs.runner }}
     container:

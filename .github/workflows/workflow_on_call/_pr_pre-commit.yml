@@ -1,4 +1,4 @@
-name: pre-commit
+name: On Call / PR Pre-commit
 
 on:
     workflow_call:
@@ -11,7 +11,8 @@ permissions:
   contents: read
 
 jobs:
-  pre-commit:
+  on_call_pre_commit:
+    name: on call pr pre-commit checks
     runs-on: ubuntu-latest
     steps:
     - name: Checkout vllm-project/vllm-ascend repo

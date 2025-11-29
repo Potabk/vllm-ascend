@@ -20,7 +20,7 @@
 # 2. pull_request change the related files
 # 3. workflow_dispatch with models input
 
-name: ascend test / accuracy report
+name: Release / Accuracy Tests
 
 on:
   pull_request:
@@ -55,7 +55,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  run:
+  accuracy_tests:
+    name: accuracy tests
     strategy:
       fail-fast: false
       matrix:
@@ -70,7 +71,7 @@ jobs:
               - Qwen3-30B-A3B
               - Qwen3-VL-30B-A3B-Instruct
               - DeepSeek-V2-Lite
-    uses: ./.github/workflows/_e2e_nightly_single_node_models.yaml
+    uses: ./.github/workflows/workflow_on_call/_nightly_accuracy_single_node.yaml
     with:
       vllm: v0.11.2
       runner: ${{ matrix.runner }}
@@ -78,9 +79,10 @@ jobs:
       model_list: ${{ toJson(matrix.model_list) }}
       upload: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.vllm-ascend-version == 'latest' }}
 
-  create_pr:
+  release_accuracy:
+    name: create accuracy report and PR
     runs-on: ubuntu-latest
-    needs: run
+    needs: accuracy_tests
     if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.vllm-ascend-version == 'latest' }}
     env:
       UPSTREAM_REPO: vllm-project/vllm-ascend
@@ -144,7 +146,7 @@ jobs:
             echo ":::"
           } > "$INDEX_MD"
 
-      - name: push accuracy report
+      - name: Commit and Push changes
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |

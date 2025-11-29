@@ -14,7 +14,7 @@
 # limitations under the License.
 # This file is a part of the vllm-ascend project.
 #
-name: 'ascend test / vllm main'
+name: Nightly / e2e / main2main tests
 
 on:
   # Run 1-card and 2-cards e2e tests per 2h
@@ -36,8 +36,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  e2e-test:
-    uses: ./.github/workflows/_e2e_test.yaml
+  nightly_e2e_main2main:
+    name: main2main full e2e tests
+    uses: ./.github/workflows/workflow_on_call/_e2e_test.yaml
     with:
       vllm: main
       runner: linux-aarch64-a2

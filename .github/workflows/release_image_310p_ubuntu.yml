@@ -1,4 +1,4 @@
-name: 'image / Ubuntu / 310p'
+name: Release / Image / 310P / openEuler
 # This is a docker build check and publish job:
 # 1. PR Triggered docker image build check
 #   - is for image build check
@@ -51,8 +51,8 @@ concurrency:
 
 jobs:
 
-  build:
-    name: vllm-ascend image build
+  release_image_310p_Ubuntu:
+    name: release image for 310p on ubuntu
     # Only arm64 build on openEuler arm64, only amd64 build on Ubuntu amd64
     # Push event or PR with both 'ready' and 'ready-for-test' labels
     runs-on: ubuntu-latest
@@ -63,7 +63,7 @@ jobs:
         fetch-depth: 0
         persist-credentials: false
 
-    - name: Print
+    - name: Print CPU info
       run: |
         lscpu
 
@@ -110,7 +110,7 @@ jobs:
         username: ${{ vars.QUAY_USERNAME }}
         password: ${{ secrets.QUAY_PASSWORD }}
 
-    - name: Build and push 310p
+    - name: Build and Push Docker Image for Ubuntu 310P
       uses: docker/build-push-action@v6
       with:
         platforms: >-

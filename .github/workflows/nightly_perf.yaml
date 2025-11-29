@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-name: 'ascend test / performance'
+name: Nightly / Performance Benchmarks
 # This workflow runs nightly benchmarks for vllm-ascend.
 
 on:
@@ -43,10 +43,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  test:
+  nightly_performance_benchmarks:
+    name: Performance Benchmarks/vLLM=${{ matrix.vllm_branch }}, vLLM-Ascend=${{ matrix.vllm_ascend_branch }}
     if: ${{ contains(github.event.pull_request.labels.*.name, 'performance-test') && contains(github.event.pull_request.labels.*.name, 'ready-for-test') || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
-
-    name: Benchmarks/vLLM=${{ matrix.vllm_branch }}, vLLM-Ascend=${{ matrix.vllm_ascend_branch }}
     runs-on: 'linux-arm64-npu-static-8'
     strategy:
       matrix:
@@ -127,12 +126,12 @@ jobs:
           # Convert the benchmark results to markdown format
           python3 benchmarks/scripts/convert_json_to_markdown.py
 
-      - name: Generate step summary
+      - name: Append benchmark results to summary
         if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
         run: |
           cat ./benchmarks/results/benchmark_results.md >> $GITHUB_STEP_SUMMARY
 
-      - name: Upload benchmark artifacts
+      - name: Upload benchmark report artifact
         if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
         uses: actions/upload-artifact@v5
         with:
@@ -142,7 +141,7 @@ jobs:
           retention-days: 90
           overwrite: true
 
-      - name: Install elastic_tool
+      - name: Install escli-tool
         if: github.event_name != 'pull_request'
         run: |
           pip install escli-tool==0.2.3
@@ -163,7 +162,7 @@ jobs:
           mkdir -p /github/home/benchmarks
           cp -r benchmarks/* /github/home/benchmarks/
 
-      - name: Run benchmark iteration
+      - name: Run benchmarks for each commit
         env:
           PIP_EXTRA_INDEX_URL: https://mirrors.huaweicloud.com/ascend/repos/pypi
         if: github.event_name != 'pull_request'

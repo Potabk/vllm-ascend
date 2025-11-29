@@ -1,4 +1,4 @@
-name: 'image / nightly / Ubuntu / test'
+name: Nightly / Image / Build
 
 on:
   schedule:
@@ -8,7 +8,7 @@ on:
 # It will be built base on the quay.io/ascend/vllm-ascend:main
 # And have some customizations for nightly testing, pushing to Huawei Cloud SWR
 jobs:
-  build-and-sync:
+  nightly_image_build:
     runs-on: ubuntu-22.04-arm
 
     strategy:
@@ -34,7 +34,7 @@ jobs:
           HW_USERNAME: ${{ secrets.HW_USERNAME }}
           HW_TOKEN: ${{ secrets.HW_TOKEN }}
 
-      - name: Build image
+      - name: Build nightly Docker Image
         id: build-image
         run: |
           TARGET="${{ matrix.target }}"
@@ -53,7 +53,7 @@ jobs:
           echo "image-tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
 
       # To avoid pushing images from forks, only push when the repository owner is 'vllm-project'
-      - name: Push image to SWR
+      - name: Push nightly image to SWR
         if: ${{ github.repository_owner == 'vllm-project' && steps.login-swr.conclusion == 'success' }}
         run: |
           docker push ${{ steps.build-image.outputs.image-tag }}

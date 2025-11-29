@@ -17,7 +17,7 @@
 
 # This workflow related to the resources atlas 800 A2
 # We will not limit the concurrency of jobs on A2
-name: 'ascend test / nightly-a2'
+name: Nightly / e2e / A2 Tests
 
 on:
   schedule:
@@ -56,7 +56,7 @@ jobs:
           - name: multi-node-deepseek-dp-torchair
             config_file_path: DeepSeek-R1-W8A8-A2-torchair.yaml
             size: 2
-    uses: ./.github/workflows/_e2e_nightly_multi_node.yaml
+    uses: ./.github/workflows/workflow_on_call/_nightly_e2e_multi_node.yaml
     with:
       soc_version: a2
       runner: linux-aarch64-a2-0
@@ -84,7 +84,7 @@ jobs:
           - name: test_custom_op
             os: linux-aarch64-a2-1
             tests: tests/e2e/nightly/ops
-    uses: ./.github/workflows/_e2e_nightly_single_node.yaml
+    uses: ./.github/workflows/workflow_on_call/_nightly_e2e_single_node.yaml
     with:
       vllm: v0.11.2
       runner: ${{ matrix.test_config.os }}
@@ -123,7 +123,7 @@ jobs:
           - os: linux-aarch64-a2-4
             model_list:
               - Qwen3-Next-80B-A3B-Instruct
-    uses: ./.github/workflows/_e2e_nightly_single_node_models.yaml
+    uses: ./.github/workflows/workflow_on_call/_nightly_accuracy_single_node.yaml
     with:
       vllm: v0.11.2
       runner: ${{ matrix.test_config.os }}

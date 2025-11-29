@@ -15,7 +15,7 @@
 # This file is a part of the vllm-ascend project.
 #
 
-name: 'e2e test / 310p-test'
+name: Scheduler / e2e / 310P Tests
 
 on:
   push:
@@ -41,7 +41,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  e2e:
+  scheduler_e2e_310p_test:
+    name: scheduler-e2e-310p-test
     # e2e-310p-test will be triggered when tag 'e2e-310p-test' & 'ready-for-test' or schedule job
     if: >- 
       ${{ 
@@ -54,7 +55,6 @@ jobs:
       matrix:
         os: [linux-aarch64-310p-1, linux-aarch64-310p-4]
         vllm_version: [v0.11.0]
-    name: 310p e2e test
     runs-on: ${{ matrix.os }}
     container:
       # TODO(yikun): Remove m.daocloud.io prefix when infra proxy ready
@@ -104,7 +104,7 @@ jobs:
           pip install -r requirements-dev.txt
           pip install -v -e .
 
-      - name: Run e2e test
+      - name: Run 310P e2e tests
         env:
           VLLM_WORKER_MULTIPROC_METHOD: spawn
           VLLM_USE_MODELSCOPE: True

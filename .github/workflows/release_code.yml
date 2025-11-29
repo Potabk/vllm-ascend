@@ -15,7 +15,7 @@
 # This file is a part of the vllm-ascend project.
 #
 
-name: build / sdist
+name: Release / Code
 
 on:
   pull_request:
@@ -36,7 +36,7 @@ on:
       - 'v*'
 
 jobs:
-  build:
+  release_code:
     name: release code
     runs-on: ubuntu-latest
     strategy:
@@ -45,7 +45,7 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.2.2
 
-      - name: Print
+      - name: Print CPU info
         run: |
           lscpu
       
@@ -71,7 +71,7 @@ jobs:
           name: vllm-ascend-src
           path: dist/*
 
-      - name: Release
+      - name: Release to PyPI
         if: startsWith(github.ref, 'refs/tags/')
         run: |
           python3 -m twine upload dist/* -u __token__ -p ${{ secrets.PYPI_TOKEN }}

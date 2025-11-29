@@ -1,11 +1,12 @@
-name: PR Reminder Comment Bot
+name: Auto Bot / PR Reminder Comment
 permissions:
   pull-requests: write
 on:
   pull_request_target:
     types: [opened]
 jobs:
-  pr_reminder:
+  auto_bot_reminder:
+    name: auto bot reminder
     runs-on: ubuntu-latest
     steps:
       - name: Remind to run full CI on PR

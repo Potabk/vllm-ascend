@@ -9,7 +9,7 @@
 按照以下几个标准来命名：
 
 ```shell
-<triggering_type>_<test_type>_<func_type>.yaml
+<triggering_type>_<test_type>_<source_type>.yaml
 ```
 
 1. 这个workflow是如何被触发的：包括pr触发、定时任务触发、workflow_call、label触发、tag触发
@@ -33,7 +33,7 @@
     ├── README.md
     ├── _e2e_nightly_multi_node.yaml
     ├── _e2e_nightly_single_node.yaml
-    ├── _e2e_nightly_single_node_models.yaml
+    ├── _e2e_nightly_single_node.yaml
     ├── _e2e_test.yaml
     ├── _nightly_image_build.yaml
     ├── format_pr_body.yaml

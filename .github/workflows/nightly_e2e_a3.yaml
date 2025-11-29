@@ -18,7 +18,7 @@
 # This workflow related to the resources atlas 800 A3
 # **Please note**: current A3 resource pool's maximum allowed concurrency is 5*16 NPUs
 # We will limit the concurrency of jobs on A3 to avoid the risk of insufficient resources
-name: 'ascend test / nightly-a3'
+name: Nightly / e2e / A3 Tests
 
 on:
   schedule:
@@ -41,8 +41,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  multi-node-tests:
-    name: multi-node
+  nightly_e2e_a3_multi_node:
+    name: nightly e2e a3 multi-node tests
     if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
     strategy:
       fail-fast: false
@@ -73,7 +73,7 @@ jobs:
           - name: multi-node-qwenw8a8-2node-eplb
             config_file_path: Qwen3-235B-W8A8-EPLB.yaml
             size: 2
-    uses: ./.github/workflows/_e2e_nightly_multi_node.yaml
+    uses: ./.github/workflows/workflow_on_call/_nightly_e2e_multi_node.yaml
     with:
       soc_version: a3
       runner: linux-aarch64-a3-0
@@ -84,10 +84,10 @@ jobs:
     secrets:
       KUBECONFIG_B64: ${{ secrets.KUBECONFIG_B64 }}
   
-  single-node-tests:
-    name: single-node
+  nightly_e2e_a3_single_node:
+    name: nightly e2e a3 single-node tests
     if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
-    needs: multi-node-tests
+    needs: nightly_e2e_a3_multi_node
     strategy:
       fail-fast: false
       matrix:
@@ -134,7 +134,7 @@ jobs:
           - name: deepseek3_2-exp-w8a8
             os: linux-aarch64-a3-16
             tests: tests/e2e/nightly/models/test_deepseek_v3_2_exp_w8a8.py
-    uses: ./.github/workflows/_e2e_nightly_single_node.yaml
+    uses: ./.github/workflows/workflow_on_call/_nightly_e2e_single_node.yaml
     with:
       vllm: v0.11.2
       runner: ${{ matrix.test_config.os }}

@@ -14,7 +14,7 @@
 # limitations under the License.
 # This file is a part of the vllm-ascend project.
 #
-name: 'ascend test / full'
+name: PR / e2e / Full Tests
 
 on:
   pull_request:
@@ -37,7 +37,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  changes:
+  pr_changes:
+    name: pr-changes-tracker
     runs-on: ubuntu-latest
     if: ${{ contains(github.event.pull_request.labels.*.name, 'ready') && contains(github.event.pull_request.labels.*.name, 'ready-for-test') }}
     outputs:
@@ -65,14 +66,14 @@ jobs:
             ut_tracker:
               - 'tests/ut/**'
 
-  e2e-test:
-    name: e2e-full
+  pr_e2e_test:
+    name: e2e full tests for PR
     strategy:
       matrix:
         vllm_version: [v0.11.2]
-    needs: [changes]
-    if: ${{ needs.changes.outputs.e2e_tracker == 'true' }}
-    uses: .github/workflows/workflow_on_call/_e2e_test.yaml
+    needs: [pr_changes]
+    if: ${{ needs.pr_changes.outputs.e2e_tracker == 'true' }}
+    uses: ./.github/workflows/workflow_on_call/_e2e_test.yaml
     with:
       vllm: ${{ matrix.vllm_version }}
       runner: linux-aarch64-a2

@@ -1,4 +1,4 @@
-name: 'image / openEuler / a3'
+name: Release / Image / A3 / openEuler
 # This is a docker build check and publish job:
 # 1. PR Triggered docker image build check
 #   - is for image build check
@@ -50,8 +50,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
-    name: vllm-ascend image build
+  release_image_a3_openEuler:
+    name: release image for a3 on openEuler
     # Only arm64 build on openEuler arm64, only amd64 build on Ubuntu amd64
     # Push event or PR with both 'ready' and 'ready-for-test' labels
     runs-on: >-
@@ -67,7 +67,7 @@ jobs:
         fetch-depth: 0
         persist-credentials: false
 
-    - name: Print
+    - name: Print CPU info
       run: |
         lscpu
     - name: Docker meta
@@ -113,7 +113,7 @@ jobs:
         username: ${{ vars.QUAY_USERNAME }}
         password: ${{ secrets.QUAY_PASSWORD }}
 
-    - name: Build and push a3
+    - name: Build and Push Docker Image for openEuler a3
       uses: docker/build-push-action@v6
       with:
         platforms: >-

@@ -1,4 +1,4 @@
-name: 'e2e nightly test multi_node'
+name: On Call / Nightly / e2e / Multi Node Tests
 
 on:
   workflow_call:
@@ -64,7 +64,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  e2e:
+  on_call_nightly_e2e_multi_node:
     name: ${{ inputs.config_file_path }}
     # This is the runner with no NPU for k8s controller
     runs-on: ${{ inputs.runner }}
