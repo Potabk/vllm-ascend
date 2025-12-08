@@ -119,6 +119,8 @@ class TestEagleProposerLoadModel(TestBase):
 
         mock_model = MagicMock()
         original_embed = MagicMock()
+        mock_model.multimodal_cpu_fields = None
+        mock_model.merge_by_field_config = None
         mock_get_model.return_value = MagicMock(model=MagicMock(
             embed_tokens=original_embed))
 
