@@ -388,6 +388,7 @@ class NPUPlatform(Platform):
         use_mla,
         has_sink=False,
         use_sparse=False,
+        use_mm_prefix: bool = False,
         attn_type: str | None = None,
     ):
         ascend_config = get_ascend_config()

@@ -373,12 +373,24 @@ class NPUModelRunner(LoRAModelRunnerMixin, ECConnectorModelRunnerMixin):
         # Set up Attention
         self.use_sparse = hasattr(self.vllm_config.model_config.hf_config,
                                   "index_topk")
-        self.attn_backend = get_attn_backend(0,
-                                             self.dtype,
-                                             None,
-                                             self.block_size,
-                                             use_mla=self.model_config.use_mla,
-                                             use_sparse=self.use_sparse)
+        if vllm_version_is('0.12.0'):
+            self.attn_backend = get_attn_backend(
+                0,
+                self.dtype,
+                None,
+                self.block_size,
+                use_mla=self.model_config.use_mla,
+                use_sparse=self.use_sparse)
+        else:
+            self.attn_backend = get_attn_backend(
+                0,
+                self.dtype,
+                None,
+                self.block_size,
+                use_mla=self.model_config.use_mla,
+                use_sparse=self.use_sparse,
+                use_mm_prefix=self.model_config is not None
+                and self.model_config.is_mm_prefix_lm)
         if self.pcp_size > 1:
             self.attn_mask_builder = None
         else:
