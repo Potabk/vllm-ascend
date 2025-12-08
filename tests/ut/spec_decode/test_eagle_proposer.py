@@ -95,6 +95,8 @@ class TestEagleProposerLoadModel(TestBase):
         mock_model = MagicMock()
         mock_model.model.embed_tokens = MagicMock()
         mock_model.lm_head = MagicMock()
+        mock_model.multimodal_cpu_fields = None
+        mock_model.merge_by_field_config = None
         mock_get_model.return_value = MagicMock()
         self.proposer.name = SpecDcodeType.EAGLE
 
