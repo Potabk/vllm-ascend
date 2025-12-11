@@ -1,15 +1,16 @@
-import vllm.distributed.ec_transfer.ec_connector.example_connector
+import vllm.distributed.ec_transfer.ec_connector.shared_storage_connector
 from safetensors.torch import load_file
 from vllm.distributed.ec_transfer.ec_connector.base import ECConnectorMetadata
-from vllm.distributed.ec_transfer.ec_connector.example_connector import ECExampleConnector, ECConnectorMetadata
+from vllm.distributed.ec_transfer.ec_connector.shared_storage_connector import (
+    ECSharedStorageConnector, ECSharedStorageConnectorMetadata)
 from vllm.logger import logger
 
 
-class AscendECExampleConnector(ECExampleConnector):
+class AscendECSharedStorageConnector(ECSharedStorageConnector):
 
     def start_load_caches(self, encoder_cache, **kwargs) -> None:
         metadata: ECConnectorMetadata = self._get_connector_metadata()
-        assert isinstance(metadata, ECConnectorMetadata)
+        assert isinstance(metadata, ECSharedStorageConnectorMetadata)
         assert encoder_cache is not None
         if metadata is None:
             logger.warning((
@@ -28,4 +29,4 @@ class AscendECExampleConnector(ECExampleConnector):
                          mm_data.mm_hash)
 
 
-vllm.distributed.ec_transfer.ec_connector.example_connector.ECExampleConnector = AscendECExampleConnector
+vllm.distributed.ec_transfer.ec_connector.shared_storage_connector.ECSharedStorageConnector = AscendECSharedStorageConnector
