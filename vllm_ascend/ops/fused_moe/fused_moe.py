@@ -266,7 +266,8 @@ class AscendFusedMoE(FusedMoE):
     def update_expert_map(self, new_expert_map):
         self._expert_map = new_expert_map
 
-    def get_map(self):
+    @property
+    def expert_map(self) -> torch.Tensor | None:
         return self._expert_map
 
     def get_log2phy_map(self):
