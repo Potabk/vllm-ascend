@@ -264,10 +264,10 @@ class AscendFusedMoE(FusedMoE):
             return QuantType.NONE
 
     def update_expert_map(self, new_expert_map):
-        self.expert_map = new_expert_map
+        self._expert_map = new_expert_map
 
     def get_map(self):
-        return self.expert_map
+        return self._expert_map
 
     def get_log2phy_map(self):
         return self.log2phy
