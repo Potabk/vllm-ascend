@@ -1,7 +1,7 @@
 import vllm.distributed.ec_transfer.ec_connector.example_connector
 from safetensors.torch import load_file
-from vllm.distributed.ec_transfer.ec_connector.base import ECConnectorMetadata
-from vllm.distributed.ec_transfer.ec_connector.example_connector import ECExampleConnector, ECConnectorMetadata
+from vllm.distributed.ec_transfer.ec_connector.example_connector import (
+    ECConnectorMetadata, ECExampleConnector)
 from vllm.logger import logger
 
 

@@ -205,7 +205,7 @@ class AscendFusedMoE(FusedMoE):
                 self.log2phy = determine_default_log2phy_map(
                     self.global_num_experts, self.ep_size, self.ep_rank).npu()
         if self._expert_map is not None and isinstance(self._expert_map,
-                                                      torch.Tensor):
+                                                       torch.Tensor):
             logger.info_once(
                 "[EP Rank %s/%s] Expert parallelism is enabled. Local/global"
                 " number of experts: %s/%s. Experts local to global index map:"

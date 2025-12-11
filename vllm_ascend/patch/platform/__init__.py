@@ -26,6 +26,6 @@ if os.getenv("DYNAMIC_EPLB", "false").lower() in ("true", "1") or os.getenv(
     import vllm_ascend.patch.platform.patch_multiproc_executor  # noqa
 
 if vllm_version_is("0.12.0"):
-    import vllm_ascend.patch.platform.patch_ec_connector012 # noqa
+    import vllm_ascend.patch.platform.patch_ec_connector012  # noqa
 else:
-    import vllm_ascend.patch.platform.patch_ec_connector # noqa
+    import vllm_ascend.patch.platform.patch_ec_connector  # noqa
