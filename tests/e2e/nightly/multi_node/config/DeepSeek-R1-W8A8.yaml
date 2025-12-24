@@ -16,7 +16,7 @@ env_common:
 disaggregated_prefill:
   enabled: true
   prefiller_host_index: [0, 1]
-  decoder_host_index: [2]
+  decoder_host_index: [2, 3]
 
 deployment:
   -
