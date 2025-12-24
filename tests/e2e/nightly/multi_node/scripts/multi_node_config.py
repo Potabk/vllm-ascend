@@ -21,7 +21,7 @@ from tests.e2e.nightly.multi_node.scripts.utils import (get_all_ipv4,
 setup_logger()
 logger = logging.getLogger(__name__)
 
-CONFIG_BASE_PATH = "tests/e2e/nightly/multi_node/config/models/"
+CONFIG_BASE_PATH = "tests/e2e/nightly/multi_node/config/"
 DEFAULT_SERVER_PORT = 8080
 
 # ----------------------------------------------------------------------
@@ -342,3 +342,11 @@ class ProxyContext:
         logger.info("Launching proxy: %s", " ".join(cmd))
         env = {**os.environ, **self.cfg.envs}
         return subprocess.Popen(cmd, env=env)
+
+
+if __name__ == '__main__':
+    config = MultiNodeConfig.from_yaml()
+    logger.info("Loaded multi-node config for test '%s'", config.test_name)
+    logger.info("Cluster topology:")
+    for node in config.topology.nodes:
+        logger.info("%s", node)

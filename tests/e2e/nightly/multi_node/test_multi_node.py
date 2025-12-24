@@ -14,12 +14,13 @@ async def test_multi_node() -> None:
     envs = config.envs
     model = config.model
 
-    server_host = config.master_ip
+    cluster_topology = config.topology
+    nodes_info = cluster_topology.nodes
+    disaggregated_prefill = cluster_topology.disaggregated_pd
+
+    server_host = cluster_topology.master_ip
     server_port = config.server_port
     proxy_port = config.proxy_port
-
-    nodes_info = config.nodes_info
-    disaggregated_prefill = config.disaggregated_prefill
 
     perf_cmd = config.perf_cmd
     acc_cmd = config.acc_cmd

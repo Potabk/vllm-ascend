@@ -149,4 +149,3 @@ jobs:
           # ignore test_dispatch_ffn_combine until the test is fixed
           pytest -sv ${{ inputs.tests }} \
           --ignore=tests/e2e/nightly/ops/test_dispatch_ffn_combine.py 
-
