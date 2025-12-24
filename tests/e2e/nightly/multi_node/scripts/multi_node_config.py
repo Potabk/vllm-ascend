@@ -7,11 +7,11 @@ from typing import Optional
 import regex as re
 import yaml
 
-from tests.e2e.nightly.multi_node.config.utils import (get_all_ipv4,
-                                                       get_avaliable_port,
-                                                       get_cluster_ips,
-                                                       get_net_interface,
-                                                       setup_logger)
+from tests.e2e.nightly.multi_node.scripts.utils import (get_all_ipv4,
+                                                        get_avaliable_port,
+                                                        get_cluster_ips,
+                                                        get_net_interface,
+                                                        setup_logger)
 
 setup_logger()
 logger = logging.getLogger(__name__)

@@ -25,6 +25,11 @@ on:
         default: "1"
         type: string
         description: replicas of the k8s cluster
+      pull_request_id:
+        required: false
+        default: ""
+        type: string
+        description: used for pr level tests(multi-node test will not triggered by pr)
       size:
         required: false
         default: "2"

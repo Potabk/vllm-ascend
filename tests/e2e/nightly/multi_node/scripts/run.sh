@@ -1,4 +1,5 @@
 #!/bin/bash
+# kubernetes entrypoint to run multi-node nightly tests for vLLM-Ascend
 set -euo pipefail
 
 # Color definitions
