@@ -209,6 +209,7 @@ class MultiNodeConfig:
 
         # ensure string envs
         self.envs = {k: str(v) for k, v in self.envs.items()}
+        logger.info("Initialized environment variables: %s", self.envs)
 
     @property
     def is_master(self) -> bool:

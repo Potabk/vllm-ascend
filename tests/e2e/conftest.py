@@ -253,11 +253,11 @@ class RemoteOpenAIServer:
                     resp = client.get(url)
                     if resp.status_code == 200:
                         ready[node_ip] = True
-                        logger.info(f"[READY] Node {node_ip} is ready.")
+                        logger.debug(f"[READY] Node {node_ip} is ready.")
                 except RequestException:
                     all_ready = False
                     if should_log:
-                        logger.info(f"[WAIT] {url}: connection failed")
+                        logger.debug(f"[WAIT] {url}: connection failed")
 
                     # check unexpected exit
                     result = self._poll()
