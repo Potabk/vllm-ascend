@@ -151,6 +151,10 @@ class MultiNodeRuntimeContext:
         return self.topology.role_of(self.index)
 
     @property
+    def is_master(self) -> bool:
+        return self.index == 0
+
+    @property
     def master_ip(self) -> str:
         return self.topology.master_ip_for(self.index)
 
@@ -295,8 +299,9 @@ class ProxyContext:
     def __enter__(self):
         rt = self.cfg.runtime
         topo = self.cfg.topology
+        cur_runtime = self.cfg.runtime.index
 
-        if rt.role != NodeRole.MASTER or topo.disaggregated_pd is None:
+        if cur_runtime != 0 or topo.disaggregated_pd is None:
             logger.info("Proxy not required on this node.")
             return self
 
