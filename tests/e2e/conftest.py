@@ -25,6 +25,7 @@ import os
 import shlex
 import subprocess
 import sys
+import tempfile
 import time
 from typing import Any, Optional, Tuple, TypeVar, Union
 
@@ -63,7 +64,8 @@ adapt_patch(True)
 adapt_patch(False)
 
 from vllm.distributed.parallel_state import (  # noqa E402
-    destroy_distributed_environment, destroy_model_parallel)
+    destroy_distributed_environment, destroy_model_parallel,
+    init_distributed_environment, initialize_model_parallel)
 
 _T = TypeVar("_T", nn.Module, torch.Tensor, BatchEncoding, BatchFeature, dict)
 _M = TypeVar("_M")
@@ -76,6 +78,21 @@ PromptVideoInput = _PromptMultiModalInput[np.ndarray]
 logger = logging.getLogger(__name__)
 
 _TEST_DIR = os.path.dirname(__file__)
+
+
+@pytest.fixture
+def dist_init():
+    temp_file = tempfile.mkstemp()[1]
+    init_distributed_environment(
+        world_size=1,
+        rank=0,
+        distributed_init_method=f"file://{temp_file}",
+        local_rank=0,
+        backend="hccl",
+    )
+    initialize_model_parallel(1, 1, 1)
+    yield
+    cleanup_dist_env_and_memory()
 
 
 def cleanup_dist_env_and_memory(shutdown_ray: bool = False):

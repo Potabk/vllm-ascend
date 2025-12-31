@@ -19,7 +19,7 @@
 
 import copy
 from types import NoneType
-from typing import Optional
+from typing import Any, Optional
 
 import torch
 import torch.nn as nn
@@ -194,6 +194,12 @@ class NPUWorker(WorkerBase):
                 if name in self._sleep_saved_buffers:
                     buffer.data.copy_(self._sleep_saved_buffers[name].data)
             self._sleep_saved_buffers = {}
+
+    def update_config(self, overrides: dict[str, Any]) -> None:
+        self.model_runner.update_config(overrides)
+
+    def reload_weights(self) -> None:
+        self.model_runner.reload_weights()
 
     def initialize_cache(self, num_gpu_blocks: int,
                          num_cpu_blocks: int) -> None:
