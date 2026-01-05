@@ -9,8 +9,6 @@ from tests.e2e.model_utils import check_outputs_equal
 MODELS = [
     "deepseek-ai/DeepSeek-V2-Lite",
 ]
-os.environ["VLLM_WORKER_MULTIPROC_METHOD"] = "spawn"
-
 
 @pytest.mark.parametrize("model", MODELS)
 def test_deepseek_v2_lite_enable_shared_expert_dp_tp2(model: str) -> None:

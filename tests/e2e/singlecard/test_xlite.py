@@ -27,13 +27,22 @@ import pytest
 from tests.e2e.conftest import VllmRunner
 from tests.e2e.model_utils import check_outputs_equal
 
-os.environ["VLLM_WORKER_MULTIPROC_METHOD"] = "spawn"
 os.environ["VLLM_ASCEND_ENABLE_NZ"] = "2"
 
-MODELS = [
-    "Qwen/Qwen3-0.6B",
-]
 
+CASE_DS_ACLGRAPH = LLMTestCase(
+    model="Qwen/Qwen3-0.6B",
+    prompts=[
+        "Hello, my name is", "The president of the United States is",
+        "The capital of France is", "The future of AI is"
+    ],
+    golden_answers=[
+        "Hello, my name is Lina. I'm a 22-year-old student from China.",
+        'The president of the United States is the same as the president of the United Nations. This is because the president',
+        'The capital of France is Paris. The capital of France is also the capital of the French Republic.',
+        'The future of AI is not just a technological challenge but a profound transformation of how we live, work'
+    ],
+)
 
 @pytest.mark.skip(
     reason="TODO: Re-enable xlite_decode_only e2e test when stable.")
