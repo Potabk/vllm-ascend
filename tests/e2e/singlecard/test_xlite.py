@@ -29,7 +29,6 @@ from tests.e2e.model_utils import check_outputs_equal
 
 os.environ["VLLM_ASCEND_ENABLE_NZ"] = "2"
 
-
 CASE_DS_ACLGRAPH = LLMTestCase(
     model="Qwen/Qwen3-0.6B",
     prompts=[
@@ -43,6 +42,7 @@ CASE_DS_ACLGRAPH = LLMTestCase(
         'The future of AI is not just a technological challenge but a profound transformation of how we live, work'
     ],
 )
+
 
 @pytest.mark.skip(
     reason="TODO: Re-enable xlite_decode_only e2e test when stable.")

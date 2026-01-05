@@ -10,6 +10,7 @@ MODELS = [
     "deepseek-ai/DeepSeek-V2-Lite",
 ]
 
+
 @pytest.mark.parametrize("model", MODELS)
 def test_deepseek_v2_lite_enable_shared_expert_dp_tp2(model: str) -> None:
 

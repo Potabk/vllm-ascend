@@ -1,7 +1,6 @@
 from dataclasses import dataclass, field
 from typing import Optional
 
-import pytest
 from vllm import SamplingParams
 
 from tests.e2e.conftest import VllmRunner
@@ -21,15 +20,14 @@ class LLMTestCase:
             top_p=1.0,
             top_k=0,
             n=1,
-        )
-    )
+        ))
 
-def gen_and_valid(runner_kwargs: dict, prompts: list[str], sampling_params: SamplingParams, golden_answers: list[str]):
-    with VllmRunner(
-        **runner_kwargs
-    ) as runner:
-        vllm_aclgraph_outputs = runner.model.generate(prompts=prompts,
-                                                      sampling_params=sampling_params)
+
+def gen_and_valid(runner_kwargs: dict, prompts: list[str],
+                  sampling_params: SamplingParams, golden_answers: list[str]):
+    with VllmRunner(**runner_kwargs) as runner:
+        vllm_aclgraph_outputs = runner.model.generate(
+            prompts=prompts, sampling_params=sampling_params)
     outputs_gen = []
     for output in vllm_aclgraph_outputs:
         outputs_gen.append(([output.outputs[0].index], output.outputs[0].text))
