@@ -1,4 +1,3 @@
-
 import pytest
 
 from tests.e2e.singlecard.utils import LLMTestCase, gen_and_valid
