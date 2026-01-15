@@ -176,11 +176,6 @@ class AscendSFAMetadataBuilder(MLACommonMetadataBuilder[AscendSFAMetadata]):
         # @override omitted only because of mypy limitation due to type variable.
         return AttentionCGSupport.UNIFORM_BATCH
 
-    def reorder_batch(self, input_batch: "NPUInputBatch",
-                      scheduler_output: "SchedulerOutput") -> bool:
-        # No need to reorder for Ascend SFA
-        return False
-
     def build(
         self,
         common_prefix_len: int,

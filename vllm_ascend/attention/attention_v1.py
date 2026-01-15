@@ -254,10 +254,6 @@ class AscendAttentionMetadataBuilder(AttentionMetadataBuilder[AscendMetadata]):
         # @override omitted only because of mypy limitation due to type variable.
         return AttentionCGSupport.ALWAYS
 
-    def reorder_batch(self, input_batch,
-                      scheduler_output: "SchedulerOutput") -> bool:
-        return False
-
     def build(
         self,
         common_prefix_len: int,

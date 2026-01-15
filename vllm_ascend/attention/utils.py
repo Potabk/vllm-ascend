@@ -211,6 +211,10 @@ def split_decodes_and_prefills(
     query_lens = (query_start_loc[1:] - query_start_loc[:-1]) \
         if query_lens_pcp_full is None else query_lens_pcp_full
     is_prefill = query_lens > decode_threshold
+    if common_attn_metadata.num_computed_tokens_cpu is not None:
+        is_prefill |= (common_attn_metadata.num_computed_tokens_cpu[:num_reqs]
+                       == 0)
+
     if not torch.any(is_prefill):
         return num_reqs, 0, num_tokens, 0
 
