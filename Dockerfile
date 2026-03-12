@@ -15,70 +15,148 @@
 # This file is a part of the vllm-ascend project.
 #
 
-FROM quay.io/ascend/cann:8.5.1-910b-ubuntu22.04-py3.11
+# =============================================================
+# Unified Dockerfile for vLLM Ascend — Ubuntu 22.04
+# Supports: 910B · a3 · 310P hardware via build arguments
+#
+# Build arguments:
+#   BASE_IMAGE      — CANN base image (controls hardware variant)
+#   SOC_VERSION     — Ascend SoC identifier
+#   PIP_INDEX_URL   — PyPI mirror URL
+#   ENABLE_MOONCAKE — "true"|"false"  build Mooncake (false for 310P)
+#   MOONCAKE_TAG    — Mooncake git tag
+#   ENABLE_CLANG    — "true"|"false"  install clang for triton-ascend
+#                     (false for 310P)
+#   VLLM_REPO       — vLLM git repository URL
+#   VLLM_TAG        — vLLM git tag / branch
+#
+# Layer cache design (most stable → most volatile):
+#   stage 1 system-deps : OS packages · pip mirror · Mooncake · clang
+#   stage 2 vllm-deps   : vLLM install · modelscope · ray
+#   stage 3 final       : vllm-ascend source COPY + install
+#
+# Usage examples:
+#
+#   910B (default):
+#     docker build .
+#
+#   a3:
+#     docker build \
+#       --build-arg BASE_IMAGE=quay.io/ascend/cann:8.5.1-a3-ubuntu22.04-py3.11 \
+#       --build-arg SOC_VERSION=ascend910_9391 .
+#
+#   310P (no Mooncake, no clang):
+#     docker build \
+#       --build-arg BASE_IMAGE=quay.io/ascend/cann:8.5.1-310p-ubuntu22.04-py3.11 \
+#       --build-arg SOC_VERSION=ascend310p1 \
+#       --build-arg ENABLE_MOONCAKE=false \
+#       --build-arg ENABLE_CLANG=false .
+# =============================================================
+
+
+# ── Stage 1: system-deps ─────────────────────────────────────
+# OS packages, pip mirror, Mooncake, clang.
+# Stable across vllm / vllm-ascend version changes.
+ARG BASE_IMAGE=quay.io/ascend/cann:8.5.1-910b-ubuntu22.04-py3.11
+FROM ${BASE_IMAGE} AS system-deps
 
 ARG PIP_INDEX_URL="https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple"
-ARG MOONCAKE_TAG="v0.3.8.post1"
 ARG SOC_VERSION="ascend910b1"
+ARG ENABLE_MOONCAKE="true"
+ARG MOONCAKE_TAG="v0.3.8.post1"
+ARG ENABLE_CLANG="true"
 
-# Define environments
-ENV DEBIAN_FRONTEND=noninteractive
-ENV SOC_VERSION=$SOC_VERSION \
+ENV DEBIAN_FRONTEND=noninteractive \
+    SOC_VERSION=${SOC_VERSION} \
     TASK_QUEUE_ENABLE=1 \
     OMP_NUM_THREADS=1
 
 WORKDIR /workspace
 
-COPY . /vllm-workspace/vllm-ascend/
+# Copy only the Mooncake installer script (rarely changes; avoids
+# invalidating this stage when other source files are modified).
+COPY tools/mooncake_installer.sh /tmp/mooncake_installer.sh
 
-# Install Mooncake dependencies
 RUN apt-get update -y && \
-    apt-get install -y git vim wget net-tools gcc g++ cmake libnuma-dev libjemalloc2 && \
-    git clone --depth 1 --branch ${MOONCAKE_TAG} https://github.com/kvcache-ai/Mooncake /vllm-workspace/Mooncake && \
-    cp /vllm-workspace/vllm-ascend/tools/mooncake_installer.sh /vllm-workspace/Mooncake/ && \
-    cd /vllm-workspace/Mooncake && bash mooncake_installer.sh -y && \
-    ARCH=$(uname -m) && \
-    source /usr/local/Ascend/ascend-toolkit/set_env.sh && \
-    export LD_LIBRARY_PATH=/usr/local/Ascend/ascend-toolkit/latest/${ARCH}-linux/devlib:/usr/local/Ascend/ascend-toolkit/latest/${ARCH}-linux/lib64:$LD_LIBRARY_PATH && \
-    mkdir -p build && cd build && cmake .. -DUSE_ASCEND_DIRECT=ON && \
-    make -j$(nproc) && make install && \
-    rm -fr /vllm-workspace/Mooncake/build && \
-    rm -rf /var/cache/apt/* && \
-    rm -rf /var/lib/apt/lists/*
+    apt-get install -y \
+        git vim wget net-tools \
+        gcc g++ cmake \
+        libnuma-dev libjemalloc2 && \
+    rm -rf /var/cache/apt/* /var/lib/apt/lists/*
 
 RUN pip config set global.index-url ${PIP_INDEX_URL}
 
-# Install vLLM
-ARG VLLM_REPO=https://github.com/vllm-project/vllm.git
-ARG VLLM_TAG=v0.16.0
-RUN git clone --depth 1 $VLLM_REPO --branch $VLLM_TAG /vllm-workspace/vllm
-# In x86, triton will be installed by vllm. But in Ascend, triton doesn't work correctly. we need to uninstall it.
-RUN VLLM_TARGET_DEVICE="empty" python3 -m pip install -v -e /vllm-workspace/vllm/[audio] --extra-index https://download.pytorch.org/whl/cpu/ && \
+# Build and install Mooncake KV-cache transfer library.
+# Skipped for 310P (ENABLE_MOONCAKE=false).
+RUN if [ "${ENABLE_MOONCAKE}" = "true" ]; then \
+        ARCH=$(uname -m) && \
+        git clone --depth 1 --branch ${MOONCAKE_TAG} \
+            https://github.com/kvcache-ai/Mooncake /tmp/Mooncake && \
+        cp /tmp/mooncake_installer.sh /tmp/Mooncake/ && \
+        source /usr/local/Ascend/ascend-toolkit/set_env.sh && \
+        export LD_LIBRARY_PATH=/usr/local/Ascend/ascend-toolkit/latest/${ARCH}-linux/devlib:/usr/local/Ascend/ascend-toolkit/latest/${ARCH}-linux/lib64:${LD_LIBRARY_PATH} && \
+        cd /tmp/Mooncake && bash mooncake_installer.sh -y && \
+        mkdir -p build && cd build && \
+        cmake .. -DUSE_ASCEND_DIRECT=ON && \
+        make -j$(nproc) && make install && \
+        rm -rf /tmp/Mooncake; \
+    fi
+
+# Install clang-15 for triton-ascend compilation.
+# Skipped for 310P (ENABLE_CLANG=false).
+RUN if [ "${ENABLE_CLANG}" = "true" ]; then \
+        apt-get update -y && \
+        apt-get install -y clang-15 && \
+        update-alternatives --install /usr/bin/clang   clang   /usr/bin/clang-15 20 && \
+        update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-15 20 && \
+        rm -rf /var/cache/apt/* /var/lib/apt/lists/*; \
+    fi
+
+
+# ── Stage 2: vllm-deps ───────────────────────────────────────
+# Clone and install vLLM, then stable Python utilities.
+# Rebuilt only when VLLM_TAG changes.
+FROM system-deps AS vllm-deps
+
+ARG VLLM_REPO="https://github.com/vllm-project/vllm.git"
+ARG VLLM_TAG="v0.16.0"
+
+RUN git clone --depth 1 ${VLLM_REPO} --branch ${VLLM_TAG} /vllm-workspace/vllm
+
+# triton does not work correctly on Ascend; install without GPU backend
+# ("empty") then remove the triton wheel that gets pulled in.
+RUN VLLM_TARGET_DEVICE="empty" python3 -m pip install -v \
+        -e /vllm-workspace/vllm/[audio] \
+        --extra-index-url https://download.pytorch.org/whl/cpu/ && \
     python3 -m pip uninstall -y triton && \
     python3 -m pip cache purge
 
-# Install vllm-ascend
-# Append `libascend_hal.so` path (devlib) to LD_LIBRARY_PATH
+# Install stable inference utilities.
+RUN python3 -m pip install \
+        modelscope \
+        'ray>=2.47.1,<=2.48.0' \
+        'protobuf>3.20.0' && \
+    python3 -m pip cache purge
+
+
+# ── Stage 3: final ───────────────────────────────────────────
+# Copy vllm-ascend source and install.
+# Invalidated on every source-code change — expected and intentional.
+FROM vllm-deps AS final
+
+COPY . /vllm-workspace/vllm-ascend/
+
 RUN export PIP_EXTRA_INDEX_URL=https://mirrors.huaweicloud.com/ascend/repos/pypi && \
     source /usr/local/Ascend/ascend-toolkit/set_env.sh && \
     source /usr/local/Ascend/nnal/atb/set_env.sh && \
-    export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/Ascend/ascend-toolkit/latest/`uname -i`-linux/devlib && \
-    python3 -m pip install -v -e /vllm-workspace/vllm-ascend/ --extra-index https://download.pytorch.org/whl/cpu/ && \
+    ARCH=$(uname -m) && \
+    export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/usr/local/Ascend/ascend-toolkit/latest/${ARCH}-linux/devlib && \
+    python3 -m pip install -v \
+        -e /vllm-workspace/vllm-ascend/ \
+        --extra-index-url https://download.pytorch.org/whl/cpu/ && \
     python3 -m pip cache purge
 
-# Install clang-15 (for triton-ascend)
-RUN apt-get update -y && \
-    apt-get -y install clang-15 && \
-    update-alternatives --install /usr/bin/clang clang /usr/bin/clang-15 20 && \
-    update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-15 20 && \
-    rm -rf /var/cache/apt/* && \
-    rm -rf /var/lib/apt/lists/*
-
-# Install modelscope (for fast download) and ray (for multinode)
-RUN python3 -m pip install modelscope 'ray>=2.47.1,<=2.48.0' 'protobuf>3.20.0' && \
-    python3 -m pip cache purge
-
-RUN echo "export LD_PRELOAD=/usr/lib/$(uname -m)-linux-gnu/libjemalloc.so.2:$LD_PRELOAD" >> ~/.bashrc
-RUN echo "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib" >> ~/.bashrc
+RUN echo "export LD_PRELOAD=/usr/lib/$(uname -m)-linux-gnu/libjemalloc.so.2:\${LD_PRELOAD}" >> ~/.bashrc && \
+    echo "export LD_LIBRARY_PATH=\${LD_LIBRARY_PATH}:/usr/local/lib" >> ~/.bashrc
 
 CMD ["/bin/bash"]
