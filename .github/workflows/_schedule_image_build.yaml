@@ -95,6 +95,25 @@ jobs:
       run: |
         mkdir -p ${{ runner.temp }}/digests
         digest="${{ steps.build.outputs.digest }}"
+        if [ -z "$digest" ]; then
+          echo "ERROR: build did not produce a digest, push likely failed"
+          exit 1
+        fi
+        if ${{ inputs.should_push }}; then
+          echo "Verifying digest is accessible in registry: quay.io/ascend/vllm-ascend@${digest}"
+          for i in 1 2 3; do
+            if docker buildx imagetools inspect "quay.io/ascend/vllm-ascend@${digest}" > /dev/null 2>&1; then
+              echo "Digest verified successfully"
+              break
+            fi
+            if [ $i -eq 3 ]; then
+              echo "ERROR: digest not accessible in registry after 3 attempts, push likely failed"
+              exit 1
+            fi
+            echo "Digest not accessible yet, retrying in 10s (attempt $i/3)..."
+            sleep 10
+          done
+        fi
         touch "${{ runner.temp }}/digests/${digest#sha256:}"
 
     - name: Upload digest
