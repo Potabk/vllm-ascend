@@ -2589,17 +2589,28 @@ class NPUModelRunner(GPUModelRunner):
     def profile_run(self) -> None:
         self.eplb_warmup()
         mc2_tokens_capacity = get_mc2_tokens_capacity()
-        if self.max_num_tokens > mc2_tokens_capacity and select_moe_comm_method(
-            mc2_tokens_capacity, self.vllm_config
-        ) in {MoECommType.MC2, MoECommType.FUSED_MC2}:
-            self._dummy_run(mc2_tokens_capacity, with_prefill=True, is_profile=True)
-        origin_max_num_tokens = self.max_num_tokens
-        # in the pcp scenario, the split sequence needs to be used for profile run
-        # TODO: after the vllm pcp function is launched, this logic needs to be brought up to the community
-        if self.pcp_size > 1:
-            self.max_num_tokens = math.ceil(self.max_num_tokens / (self.pcp_size * 2)) * 2
-        super().profile_run()
-        self.max_num_tokens = origin_max_num_tokens
+
+        # Disable torch.compile during profiling to avoid Dynamo issues with certain model configs
+        # (e.g., Qwen3.5 + TP4 + MTP can trigger uninitialized variable errors in vLLM's tracer)
+        original_compile_config = self.vllm_config.compilation_config.mode
+        try:
+            # Temporarily disable compilation during profile_run
+            self.vllm_config.compilation_config.mode = None
+
+            if self.max_num_tokens > mc2_tokens_capacity and select_moe_comm_method(
+                mc2_tokens_capacity, self.vllm_config
+            ) in {MoECommType.MC2, MoECommType.FUSED_MC2}:
+                self._dummy_run(mc2_tokens_capacity, with_prefill=True, is_profile=True)
+            origin_max_num_tokens = self.max_num_tokens
+            # in the pcp scenario, the split sequence needs to be used for profile run
+            # TODO: after the vllm pcp function is launched, this logic needs to be brought up to the community
+            if self.pcp_size > 1:
+                self.max_num_tokens = math.ceil(self.max_num_tokens / (self.pcp_size * 2)) * 2
+            super().profile_run()
+            self.max_num_tokens = origin_max_num_tokens
+        finally:
+            # Restore original compilation config
+            self.vllm_config.compilation_config.mode = original_compile_config
 
     def eplb_warmup(self):
         if self.dynamic_eplb and not self.is_eplb_warmuped:
@@ -2685,10 +2696,58 @@ class NPUModelRunner(GPUModelRunner):
             self.drafter.initialize_attn_backend(kv_cache_config, block_size)
 
         if has_kv_transfer_group():
-            get_kv_transfer_group().register_kv_caches(kv_caches)
+            # Flatten hierarchical KV cache structures for CPU offloading compatibility
+            # The offloading connector expects flat torch.Tensor objects,
+            # but vllm-ascend may have nested structures (dicts/lists of tensors).
+            kv_caches_flat = self._flatten_kv_caches(kv_caches)
+            get_kv_transfer_group().register_kv_caches(kv_caches_flat)
 
         if self.model_config.enable_return_routed_experts:
             self.init_routed_experts_capturer()
+
+    def _flatten_kv_caches(self, kv_caches: dict) -> dict[str, torch.Tensor]:
+        """
+        Flatten hierarchical KV cache structures for CPU offloading compatibility.
+
+        The CPU offloading connector expects flat torch.Tensor objects, but vllm-ascend
+        may have nested structures (dicts/lists of tensors). This method flattens them
+        while maintaining unique identifiers.
+
+        Args:
+            kv_caches: Dictionary that may contain nested structures
+
+        Returns:
+            Dictionary with all values as torch.Tensor objects
+        """
+        kv_caches_flat = {}
+        for layer_name, layer_kv_cache in kv_caches.items():
+            if isinstance(layer_kv_cache, torch.Tensor):
+                # Already flat
+                kv_caches_flat[layer_name] = layer_kv_cache
+            elif isinstance(layer_kv_cache, dict):
+                # Flatten nested dict structure
+                for sub_name, sub_cache in layer_kv_cache.items():
+                    if isinstance(sub_cache, torch.Tensor):
+                        flat_name = f"{layer_name}.{sub_name}"
+                        kv_caches_flat[flat_name] = sub_cache
+                    elif isinstance(sub_cache, (list, tuple)):
+                        # Flatten list/tuple within dict
+                        for idx, item in enumerate(sub_cache):
+                            flat_name = f"{layer_name}.{sub_name}[{idx}]"
+                            kv_caches_flat[flat_name] = item
+            elif isinstance(layer_kv_cache, (list, tuple)):
+                # Flatten list/tuple structure
+                for idx, sub_cache in enumerate(layer_kv_cache):
+                    if isinstance(sub_cache, torch.Tensor):
+                        flat_name = f"{layer_name}[{idx}]"
+                        kv_caches_flat[flat_name] = sub_cache
+                    elif isinstance(sub_cache, dict):
+                        # Flatten nested dict within list
+                        for sub_name, item in sub_cache.items():
+                            flat_name = f"{layer_name}[{idx}].{sub_name}"
+                            kv_caches_flat[flat_name] = item
+
+        return kv_caches_flat
 
     def _align_memory(self, tensor: torch.Tensor, alignment: int) -> torch.Tensor:
         data_ptr = tensor.data_ptr()
