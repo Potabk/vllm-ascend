@@ -55,25 +55,30 @@ class AscendGatedDeltaNetAttention(GatedDeltaNetAttention):
         3. Output projection
         """
         if not self.gqa_interleaved_layout:
-            # Qwen3.5: weights are already in correct order, use parent's split
-            # logic; _forward_core (overridden below) handles Ascend-specific ops.
-            return super().forward(hidden_states, output)
+            mixed_qkvz, _ = self.in_proj_qkvz(hidden_states)
+            num_tokens = mixed_qkvz.size(0)
+            qkv_size = (self.key_dim * 2 + self.value_dim) // self.tp_size
+            z_size = self.value_dim // self.tp_size
+            mixed_qkv, z = mixed_qkvz.split([qkv_size, z_size], dim=-1)
+            z = z.reshape(z.size(0), -1, self.head_v_dim)
+            ba, _ = self.in_proj_ba(hidden_states)
+            b, a = ba.chunk(2, dim=-1)
 
-        # ============================================================
-        # Part 1: Input Projection (Qwen3Next GQA-interleaved layout)
-        # ============================================================
-        projected_states_qkvz, _ = self.in_proj_qkvz(hidden_states)
-        projected_states_ba, _ = self.in_proj_ba(hidden_states)
-        num_tokens = projected_states_qkvz.size(0)
+            b = b.contiguous()
+            a = a.contiguous()
+        else:
+            projected_states_qkvz, _ = self.in_proj_qkvz(hidden_states)
+            projected_states_ba, _ = self.in_proj_ba(hidden_states)
+            num_tokens = projected_states_qkvz.size(0)
 
-        mixed_qkv, z, b, a = fused_qkvzba_split_reshape_cat(
-            projected_states_qkvz,
-            projected_states_ba,
-            triton.cdiv(self.num_k_heads, self.tp_size),
-            triton.cdiv(self.num_v_heads, self.tp_size),
-            self.head_k_dim,
-            self.head_v_dim,
-        )
+            mixed_qkv, z, b, a = fused_qkvzba_split_reshape_cat(
+                projected_states_qkvz,
+                projected_states_ba,
+                triton.cdiv(self.num_k_heads, self.tp_size),
+                triton.cdiv(self.num_v_heads, self.tp_size),
+                self.head_k_dim,
+                self.head_v_dim,
+            )
 
         # ============================================================
         # Part 2: Core Attention (Custom Op)

@@ -19,6 +19,9 @@
 
 import torch
 from vllm.model_executor.models.qwen3_next import Qwen3NextAttention
+from vllm.model_executor.models.qwen3_5 import Qwen3_5DecoderLayer
+from vllm.distributed import get_tensor_model_parallel_world_size
+from vllm_ascend.ascend_forward_context import _EXTRA_CTX
 
 
 class AscendQwen3NextAttention(Qwen3NextAttention):
@@ -70,4 +73,65 @@ class AscendQwen3NextAttention(Qwen3NextAttention):
         output[:], _ = self.o_proj(attn_output)
 
 
+class AscendQwen3_5DecoderLayer(Qwen3_5DecoderLayer):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        residual: torch.Tensor | None,
+        positions: torch.Tensor = None,
+        **kwargs: object,
+    ):
+        if residual is None:
+            residual = hidden_states
+            hidden_states = self.input_layernorm(hidden_states)
+        else:
+            hidden_states, residual = self.input_layernorm(hidden_states, residual)
+
+        if self.layer_idx == 0 and _EXTRA_CTX.flash_comm_v1_enabled:
+            tp_size = get_tensor_model_parallel_world_size()
+            n_out = (hidden_states.shape[0] + tp_size - 1) // tp_size
+            hidden_dim = hidden_states.shape[-1]
+            self_attention_output = torch.empty(
+                (n_out, hidden_dim), dtype=hidden_states.dtype, device=hidden_states.device
+            )
+        else:
+            self_attention_output = torch.empty_like(hidden_states)
+
+        if self.layer_type == "linear_attention":
+            self.linear_attn(
+                hidden_states=hidden_states,
+                output=self_attention_output,
+            )
+        elif self.layer_type == "full_attention":
+            self.self_attn(
+                hidden_states=hidden_states,
+                output=self_attention_output,
+                positions=positions,
+            )
+        else:
+            raise ValueError("Invalid layer_type")
+        hidden_states = self_attention_output
+
+        if self.layer_scale:
+            if len(hidden_states.shape) == 2:
+                hidden_states = hidden_states * (self.attn_layer_scale.to(hidden_states.dtype)[0] + 1)
+            else:
+                hidden_states = hidden_states * (self.attn_layer_scale.to(hidden_states.dtype) + 1)
+
+        # Fully Connected
+        hidden_states, residual = self.post_attention_layernorm(hidden_states, residual)
+        hidden_states = self.mlp(hidden_states)
+
+        if self.layer_scale:
+            if len(hidden_states.shape) == 2:
+                hidden_states = hidden_states * (self.ffn_layer_scale.to(hidden_states.dtype)[0] + 1)
+            else:
+                assert len(hidden_states.shape) == len(self.ffn_layer_scale.shape), (
+                    f"shape must be the same {len(hidden_states.shape)}, {len(self.ffn_layer_scale.shape)}"
+                )
+                hidden_states = hidden_states * (self.ffn_layer_scale.to(hidden_states.dtype) + 1)
+
+        return hidden_states, residual
+
+Qwen3_5DecoderLayer.forward = AscendQwen3_5DecoderLayer.forward
 Qwen3NextAttention.forward = AscendQwen3NextAttention.forward
