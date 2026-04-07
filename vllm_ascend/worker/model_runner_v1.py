@@ -2696,11 +2696,36 @@ class NPUModelRunner(GPUModelRunner):
             self.drafter.initialize_attn_backend(kv_cache_config, block_size)
 
         if has_kv_transfer_group():
-            # Flatten hierarchical KV cache structures for CPU offloading compatibility
-            # The offloading connector expects flat torch.Tensor objects,
-            # but vllm-ascend may have nested structures (dicts/lists of tensors).
-            kv_caches_flat = self._flatten_kv_caches(kv_caches)
-            get_kv_transfer_group().register_kv_caches(kv_caches_flat)
+            kv_tc = self.vllm_config.kv_transfer_config
+            is_offloading = (
+                kv_tc is not None and
+                getattr(kv_tc, 'kv_connector', None) == "OffloadingConnector"
+            )
+            if is_offloading and hasattr(self, '_kv_offloading_combined'):
+                # For OffloadingConnector (vllm PR #37853): pass combined k+v
+                # tensors with original layer_name keys. The connector iterates
+                # over kv_cache_config layer names and expects single tensors.
+                kv_caches_for_connector: dict[str, torch.Tensor | list[torch.Tensor]] = {}
+                for layer_name, kv_cache in kv_caches.items():
+                    if layer_name in self._kv_offloading_combined:
+                        kv_caches_for_connector[layer_name] = (
+                            self._kv_offloading_combined[layer_name]
+                        )
+                    elif isinstance(kv_cache, list):
+                        # MambaSpec: pass list directly
+                        kv_caches_for_connector[layer_name] = kv_cache
+                    elif isinstance(kv_cache, torch.Tensor):
+                        kv_caches_for_connector[layer_name] = kv_cache
+                    else:
+                        # Fallback for other tuple types (e.g. sparse)
+                        kv_caches_for_connector[layer_name] = kv_cache
+                get_kv_transfer_group().register_kv_caches(
+                    kv_caches_for_connector)
+            else:
+                # For other connectors (P/D disaggregation, etc.):
+                # flatten hierarchical structures as before.
+                kv_caches_flat = self._flatten_kv_caches(kv_caches)
+                get_kv_transfer_group().register_kv_caches(kv_caches_flat)
 
         if self.model_config.enable_return_routed_experts:
             self.init_routed_experts_capturer()
@@ -2901,9 +2926,30 @@ class NPUModelRunner(GPUModelRunner):
                         dsa_k_scale_tensor_size = int(kv_cache_tensor.size // dsa_k_scale_tensor_split_factor)
 
                     # for other attentions, e.g., self_attn, sliding window attn
-                    if self.vllm_config.kv_transfer_config is None:
-                        k_tensor = torch.zeros(k_tensor_size, dtype=torch.int8, device=self.device)
-                        v_tensor = torch.zeros(v_tensor_size, dtype=torch.int8, device=self.device)
+                    kv_tc = self.vllm_config.kv_transfer_config
+                    is_offloading_connector = (
+                        kv_tc is not None and
+                        getattr(kv_tc, 'kv_connector', None) == "OffloadingConnector"
+                    )
+                    if kv_tc is None or is_offloading_connector:
+                        if is_offloading_connector and not self.use_sparse:
+                            # For OffloadingConnector: allocate k and v together as a single
+                            # contiguous int8 buffer so the connector can process them as one
+                            # tensor per layer (required by PR #37853 CanonicalKVCaches API).
+                            # The combined buffer has storage_offset=0 and correct total size.
+                            combined = torch.zeros(
+                                k_tensor_size + v_tensor_size, dtype=torch.int8, device=self.device
+                            )
+                            k_tensor = combined[:k_tensor_size]
+                            v_tensor = combined[k_tensor_size:]
+                            if not hasattr(self, '_kv_offloading_combined'):
+                                self._kv_offloading_combined: dict[str, torch.Tensor] = {}
+                            for layer_name_inner in kv_cache_tensor.shared_by:
+                                if "attn" in layer_name_inner and "linear_attn" not in layer_name_inner:
+                                    self._kv_offloading_combined[layer_name_inner] = combined
+                        else:
+                            k_tensor = torch.zeros(k_tensor_size, dtype=torch.int8, device=self.device)
+                            v_tensor = torch.zeros(v_tensor_size, dtype=torch.int8, device=self.device)
                         #### for deepseek sparse attention
                         if dsa_k_tensor_size is not None:
                             dsa_k_tensor = torch.zeros(dsa_k_tensor_size, dtype=torch.int8, device=self.device)
@@ -2912,6 +2958,8 @@ class NPUModelRunner(GPUModelRunner):
                                 dsa_k_scale_tensor_size, dtype=torch.int8, device=self.device
                             )
                     else:
+                        # P/D disaggregation: allocate k and v separately with 2M alignment
+                        # so both can be independently transferred over the network.
                         k_tensor = torch.zeros(k_tensor_size + alignment, dtype=torch.int8, device=self.device)
                         v_tensor = torch.zeros(v_tensor_size + alignment, dtype=torch.int8, device=self.device)
                         k_tensor = self._align_memory(k_tensor, alignment)[:k_tensor_size]

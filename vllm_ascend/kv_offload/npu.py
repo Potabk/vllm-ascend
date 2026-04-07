@@ -1,13 +1,11 @@
 from collections.abc import Iterator
 
-import torch
 from vllm.config import VllmConfig
-from vllm.v1.attention.backend import AttentionBackend  # type: ignore
 from vllm.v1.kv_cache_interface import KVCacheConfig
 from vllm.v1.kv_offload.abstract import LoadStoreSpec, OffloadingManager
 from vllm.v1.kv_offload.cpu.manager import CPUOffloadingManager
 from vllm.v1.kv_offload.mediums import CPULoadStoreSpec, GPULoadStoreSpec
-from vllm.v1.kv_offload.spec import OffloadingSpec
+from vllm.v1.kv_offload.spec import CanonicalKVCaches, OffloadingSpec
 from vllm.v1.kv_offload.worker.worker import OffloadingHandler
 
 from vllm_ascend.kv_offload.cpu_npu import CpuNpuOffloadingHandler
@@ -44,18 +42,16 @@ class NPUOffloadingSpec(OffloadingSpec):
 
     def get_handlers(
         self,
-        kv_caches: dict[str, torch.Tensor],
-        attn_backends: dict[str, type[AttentionBackend]],
+        kv_caches: CanonicalKVCaches,
     ) -> Iterator[tuple[type[LoadStoreSpec], type[LoadStoreSpec], OffloadingHandler]]:
         if not self._handler:
             assert len(self.gpu_block_size) == 1
             gpu_block_size = self.gpu_block_size[0]
             self._handler = CpuNpuOffloadingHandler(
-                attn_backends=attn_backends,
+                canonical_kv_caches=kv_caches,
                 gpu_block_size=gpu_block_size,
                 cpu_block_size=gpu_block_size * self.block_size_factor,
                 num_cpu_blocks=self.num_cpu_blocks,
-                gpu_caches=kv_caches,
             )
 
         assert self._handler is not None
