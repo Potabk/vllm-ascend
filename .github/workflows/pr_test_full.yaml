@@ -102,7 +102,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        vllm_version: [14acf429ac08b6d538ca6feb3e06b6d13895804d]
+        vllm_version: [5af684c31912232e5c89484c2e8259e0fac6c55b]
     needs: [parse-trigger]
     if: ${{ needs.parse-trigger.outputs.allowed == 'true' }}
     uses: ./.github/workflows/_e2e_test.yaml
