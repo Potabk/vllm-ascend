@@ -29,7 +29,7 @@ on:
       vllm_ascend_branch:
         description: 'Branch to test (main or releases/v0.18.0)'
         required: true
-        default: 'main'
+        default: 'releases/v0.18.0'
         type: choice
         options:
           - main
@@ -69,7 +69,6 @@ env:
   ASCEND_LOG_PREFIX: '/root/.cache/ascend-logs'
   # NOTE: Do not name this the same as `VLLM_VERSION`, VLLM_VERSION is used in the src.
   VLLM_REF: "29e48707e8144b78dd5d756f793c26a405043f3d"
-  VLLM_ASCEND_VERSION: "main"
 
 jobs:
   parse-trigger:
@@ -89,29 +88,21 @@ jobs:
     outputs:
       ascend_log_prefix: ${{ steps.export.outputs.ascend_log_prefix }}
       vllm_version: ${{ steps.export.outputs.vllm_version }}
-      vllm_ascend_version: ${{ steps.export.outputs.vllm_ascend_version }}
     steps:
       - id: export
         run: |
           {
             echo "ascend_log_prefix=${{ env.ASCEND_LOG_PREFIX }}"
             echo "vllm_version=${{ env.VLLM_REF }}"
-            echo "vllm_ascend_version=${{ env.VLLM_ASCEND_VERSION }}"
           } >> $GITHUB_OUTPUT
 
   build-image:
     name: Build nightly-a3 image
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    strategy:
-      matrix:
-        vllm_ascend_branch: >-
-          ${{ github.event_name == 'workflow_dispatch' 
-              && fromJSON(format('["{0}"]', inputs.vllm_ascend_branch))
-              || fromJSON('["main", "releases/v0.18.0"]') }}
     uses: ./.github/workflows/_nightly_image_build.yaml
     with:
       target: a3
-      vllm_ascend_branch: ${{ matrix.vllm_ascend_branch }}
+      vllm_ascend_branch: ${{ inputs.vllm_ascend_branch }}}
     secrets:
       HW_USERNAME: ${{ secrets.HW_USERNAME }}
       HW_TOKEN: ${{ secrets.HW_TOKEN }}
@@ -128,7 +119,6 @@ jobs:
       fail-fast: false
       max-parallel: 2
       matrix:
-        vllm_ascend_branch: [main]
         test_config:
           - name: multi-node-deepseek-v3.2-W8A8-EP
             config_file_path: DeepSeek-V3_2-W8A8-EP.yaml
@@ -137,12 +127,13 @@ jobs:
     with:
       soc_version: a3
       runner: linux-aarch64-a3-0
-      image: 'swr.cn-southwest-2.myhuaweicloud.com/base_image/ascend-ci/vllm-ascend:nightly-ci-${{ matrix.vllm_ascend_branch }}-a3'
+      image: ${{ needs.build-image.outputs.image_ref }}
       ascend_log_prefix: ${{ needs.setup-vars.outputs.ascend_log_prefix }}
       replicas: 1
       size: ${{ matrix.test_config.size }}
       config_file_path: ${{ matrix.test_config.config_file_path }}
       name: ${{ matrix.test_config.name }}
+      # This is only used for pull_request test, for schedule tests, we should only pull nightly images rather than building from source.
       vllm_ascend_ref: ${{ needs.parse-trigger.outputs.ref }}
       vllm_version: ${{ needs.setup-vars.outputs.vllm_version }}
       should_run: >-
@@ -166,7 +157,6 @@ jobs:
       fail-fast: false
       max-parallel: 4
       matrix:
-        vllm_ascend_branch: [main]
         test_config:
           - name: multi-node-deepseek-r1-w8a8-longseq
             config_file_path: DeepSeek-R1-W8A8-longseq.yaml
@@ -208,12 +198,13 @@ jobs:
     with:
       soc_version: a3
       runner: linux-aarch64-a3-0
-      image: 'swr.cn-southwest-2.myhuaweicloud.com/base_image/ascend-ci/vllm-ascend:nightly-ci-${{ matrix.vllm_ascend_branch }}-a3'
+      image: ${{ needs.build-image.outputs.image_ref }}
       ascend_log_prefix: ${{ needs.setup-vars.outputs.ascend_log_prefix }}
       replicas: 1
       size: ${{ matrix.test_config.size }}
       config_file_path: ${{ matrix.test_config.config_file_path }}
       name: ${{ matrix.test_config.name }}
+      # Only used for pull_request tests .
       vllm_ascend_ref: ${{ needs.parse-trigger.outputs.ref }}
       vllm_version: ${{ needs.setup-vars.outputs.vllm_version }}
       should_run: >-
@@ -236,7 +227,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        vllm_ascend_branch: [releases-v0.18.0]
         test_config:
           # pytest-driven tests
           - name: qwen3-30b-acc
@@ -324,7 +314,7 @@ jobs:
     uses: ./.github/workflows/_e2e_nightly_single_node.yaml
     with:
       runner: ${{ matrix.test_config.os }}
-      image: 'swr.cn-southwest-2.myhuaweicloud.com/base_image/ascend-ci/vllm-ascend:nightly-ci-${{ matrix.vllm_ascend_branch }}-a3'
+      image: ${{ needs.build-image.outputs.image_ref }}
       tests: ${{ matrix.test_config.tests }}
       config_file_path: ${{ matrix.test_config.config_file_path }}
       name: ${{ matrix.test_config.name }}

@@ -29,6 +29,10 @@ on:
         type: string
         default: 'main'
         description: "Branch/ref to checkout"
+    outputs:
+      image_ref: 
+        description: "The reference of the built image, e.g., swr.cn-southwest-2.myhuaweicloud.com/base_image/ascend-ci/vllm-ascend:nightly-ci-main-a2"
+        value: ${{ jobs.build.outputs.image_ref }}
     secrets:
       HW_USERNAME:
         required: false
@@ -41,6 +45,8 @@ jobs:
   build:
     name: Build nightly-${{ inputs.target }} image
     runs-on: ubuntu-22.04-arm
+    outputs:
+      image_ref: ${{ steps.push-image.outputs.image_ref }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -77,8 +83,12 @@ jobs:
             -t "$IMAGE" .
 
       - name: Push image to SWR
+        id: push-image
         if: ${{ github.repository_owner == 'vllm-project' && steps.login-swr.conclusion == 'success' }}
         run: |
           BRANCH_TAG="${{ inputs.vllm_ascend_branch }}"
           BRANCH_TAG="${BRANCH_TAG//\//-}"
-          docker push swr.cn-southwest-2.myhuaweicloud.com/base_image/ascend-ci/vllm-ascend:nightly-ci-${BRANCH_TAG}-${{ inputs.target }}
+          IMAGE="swr.cn-southwest-2.myhuaweicloud.com/base_image/ascend-ci/vllm-ascend:nightly-ci-${BRANCH_TAG}-${{ inputs.target }}"
+          echo "Pushing image: ${IMAGE}"
+          docker push "${IMAGE}"
+          echo "image_ref=${IMAGE}" >> "$GITHUB_OUTPUT"

@@ -28,7 +28,7 @@ on:
       vllm_ascend_branch:
         description: 'Branch to test (main or releases/v0.18.0)'
         required: true
-        default: 'main'
+        default: 'releases/v0.18.0'
         type: choice
         options:
           - main
@@ -69,7 +69,6 @@ env:
   CANN_IMAGE: 'swr.cn-southwest-2.myhuaweicloud.com/base_image/ascend-ci/cann:8.5.1-910b-ubuntu22.04-py3.11'
   ASCEND_LOG_PREFIX: '/root/.cache/ascend-logs'
   VLLM_REF: "29e48707e8144b78dd5d756f793c26a405043f3d"
-  VLLM_ASCEND_VERSION: "main"
 
 jobs:
   parse-trigger:
@@ -90,7 +89,6 @@ jobs:
       cann_image: ${{ steps.export.outputs.cann_image }}
       ascend_log_prefix: ${{ steps.export.outputs.ascend_log_prefix }}
       vllm_version: ${{ steps.export.outputs.vllm_version }}
-      vllm_ascend_version: ${{ steps.export.outputs.vllm_ascend_version }}
     steps:
       - id: export
         run: |
@@ -98,7 +96,6 @@ jobs:
             echo "cann_image=${{ env.CANN_IMAGE }}"
             echo "ascend_log_prefix=${{ env.ASCEND_LOG_PREFIX }}"
             echo "vllm_version=${{ env.VLLM_REF }}"
-            echo "vllm_ascend_version=${{ env.VLLM_ASCEND_VERSION }}"
           } >> $GITHUB_OUTPUT
 
   build-image:
@@ -106,10 +103,7 @@ jobs:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     strategy:
       matrix:
-        vllm_ascend_branch: >-
-          ${{ github.event_name == 'workflow_dispatch' 
-              && fromJSON(format('["{0}"]', inputs.vllm_ascend_branch))
-              || fromJSON('["main", "releases/v0.18.0"]') }}
+        vllm_ascend_branch: ${{ inputs.vllm_ascend_branch }}}
     uses: ./.github/workflows/_nightly_image_build.yaml
     with:
       target: a2
