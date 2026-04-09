@@ -36,6 +36,10 @@ class AscendUnquantizedFusedMoEMethod310(UnquantizedFusedMoEMethod):
     def __init__(self, moe: FusedMoEConfig = None):
         super().__init__(moe=moe)
 
+    @property
+    def is_monolithic(self) -> bool:
+        return False
+
     def process_weights_after_loading(self, layer):
         super().process_weights_after_loading(layer)
 
