@@ -1,0 +1,174 @@
+#
+# Copyright (c) 2025 Huawei Technologies Co., Ltd. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# This file is a part of the vllm-ascend project.
+#
+name: Smart E2E
+
+on:
+  pull_request:
+    branches:
+      - 'main'
+      - '*-dev'
+      - 'releases/v*'
+    types: [ labeled, synchronize ]
+
+# Bash shells do not use ~/.profile or ~/.bashrc so these shells need to be explicitly
+# declared as "shell: bash -el {0}" on steps that need to be properly activated.
+# It's used to activate ascend-toolkit environment variables.
+defaults:
+  run:
+    shell: bash -el {0}
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+# only cancel in-progress runs of the same workflow
+# and ignore the lint / 1 card / 4 cards test type
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    runs-on: linux-aarch64-a2b3-0
+    if: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ready') && contains(github.event.pull_request.labels.*.name, 'smart-e2e') }}
+    outputs:
+      has_tests: ${{ steps.scope.outputs.has_tests }}
+      test_groups: ${{ steps.scope.outputs.test_groups }}
+      matched_modules: ${{ steps.scope.outputs.matched_modules }}
+    container:
+      image: swr.cn-southwest-2.myhuaweicloud.com/base_image/ascend-ci/vllm-ascend:nightly-cpu
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Get changed files and determine test scope
+        id: scope
+        # This step identifies which modules the pull request modified based on
+        # the differences between the PR commit and the main branch's Git
+        # repository. Then, it runs determine_smart_e2e_scope.py to determine
+        # which specific test cases should be triggered based on the modified
+        # modules, and groups them by (num_npus, npu_type) for runner routing.
+        run: |
+          git config --global --add safe.directory /__w/vllm-ascend/vllm-ascend
+          git fetch origin ${{ github.base_ref }}
+          pip install pyyaml
+          python3 .github/workflows/scripts/determine_smart_e2e_scope.py \
+            --diff-base origin/${{ github.base_ref }}
+
+      - name: Post scope summary
+        if: ${{ steps.scope.outputs.has_tests == 'true' }}
+        run: |
+          {
+            echo "## Smart E2E Test Scope"
+            echo ""
+            echo "**Matched modules:** ${{ steps.scope.outputs.matched_modules }}"
+            echo ""
+            echo '```json'
+            echo '${{ steps.scope.outputs.test_groups }}' | python3 -m json.tool
+            echo '```'
+          } >> $GITHUB_STEP_SUMMARY
+
+  smart-ut-test:
+    name: smart-ut (${{ matrix.group.npu_type }} x${{ matrix.group.num_npus }})
+    needs: [changes]
+    if: ${{ needs.changes.outputs.has_tests == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        group: ${{ fromJSON(needs.changes.outputs.test_groups) }}
+    runs-on: ${{ matrix.group.runner }}
+    container:
+      image: swr.cn-southwest-2.myhuaweicloud.com/base_image/ascend-ci/cann:${{ matrix.group.image_tag }}
+      env:
+        VLLM_LOGGING_LEVEL: ERROR
+        VLLM_USE_MODELSCOPE: True
+        SOC_VERSION: ascend910b1
+        MAX_JOBS: 4
+        COMPILE_CUSTOM_KERNELS: 0
+        UV_INDEX_URL: http://cache-service.nginx-pypi-cache.svc.cluster.local/pypi/simple
+        UV_EXTRA_INDEX_URL: https://mirrors.huaweicloud.com/ascend/repos/pypi
+        UV_INDEX_STRATEGY: unsafe-best-match
+        UV_NO_CACHE: 1
+        UV_SYSTEM_PYTHON: 1
+        UV_PYTHON: python3
+    steps:
+      - name: Install packages
+        run: |
+          sed -Ei 's@(ports|archive).ubuntu.com@cache-service.nginx-pypi-cache.svc.cluster.local:8081@g' /etc/apt/sources.list
+          pip config set global.index-url http://cache-service.nginx-pypi-cache.svc.cluster.local/pypi/simple
+          pip config set global.trusted-host cache-service.nginx-pypi-cache.svc.cluster.local
+          apt-get update -y
+          apt-get install -y python3-pip git vim wget net-tools gcc g++ cmake libnuma-dev curl gnupg2
+          git config --global --add safe.directory /__w/vllm-ascend/vllm-ascend
+          pip install uv
+
+      - name: Checkout vllm-project/vllm repo
+        uses: actions/checkout@v6
+        with:
+          repository: vllm-project/vllm
+          ref: v0.19.0
+          path: ./vllm-empty
+
+      - name: Install vllm-project/vllm from source
+        working-directory: ./vllm-empty
+        run: |
+          VLLM_TARGET_DEVICE=empty uv pip install . --extra-index-url https://download.pytorch.org/whl/cpu/
+          uv pip uninstall triton
+
+      - name: Checkout vllm-project/vllm-ascend repo
+        uses: actions/checkout@v6
+
+      - name: Get csrc hash
+        id: get_csrc_hash
+        run: |
+          CSRC_HASH=$(find ./csrc ./setup.py ./CMakeLists.txt ./cmake \
+            -type f -not -path '*/.*' | sort | xargs sha256sum | sha256sum | awk '{print $1}')
+          echo "CSRC_HASH=$CSRC_HASH" >> $GITHUB_OUTPUT
+
+      - name: Cache vllm-ascend csrc
+        uses: runs-on/cache@v4
+        with:
+          path: |
+            vllm_ascend/_cann_ops_custom
+            vllm_ascend/*.so
+            vllm_ascend/lib
+            vllm_ascend/include
+          key: vllm-ascend-build-v1-${{ runner.os }}-swr.cn-southwest-2.myhuaweicloud.com/base_image/ascend-ci/cann:${{ matrix.group.image_tag }}-${{ steps.get_csrc_hash.outputs.CSRC_HASH }}
+          restore-keys: |
+            vllm-ascend-build-v1-${{ runner.os }}-swr.cn-southwest-2.myhuaweicloud.com/base_image/ascend-ci/cann:${{ matrix.group.image_tag }}-${{ steps.get_csrc_hash.outputs.CSRC_HASH }}
+
+      - name: Install vllm-project/vllm-ascend
+        env:
+          PIP_EXTRA_INDEX_URL: https://mirrors.huaweicloud.com/ascend/repos/pypi
+        run: |
+          pip install uc-manager
+          uv pip install -r requirements-dev.txt
+          if find vllm_ascend -maxdepth 1 -name '*.so' -type f 2>/dev/null | grep -q .; then
+            COMPILE_CUSTOM_KERNELS=0 uv pip install -v -e .
+          else
+            uv pip install -v -e .
+          fi
+      - name: Run smart UT
+        env:
+          VLLM_WORKER_MULTIPROC_METHOD: spawn
+          TORCH_DEVICE_BACKEND_AUTOLOAD: 0
+        run: |
+          export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/Ascend/ascend-toolkit/latest/x86_64-linux/devlib
+          pytest -sv ${{ matrix.group.tests }}
