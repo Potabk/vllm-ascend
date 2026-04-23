@@ -283,6 +283,8 @@ def scan_test_file(filepath: str) -> dict[RunnerKey, list[str]]:
 def group_tests_by_runner(
     test_dirs: list[str],
     runners: list[RunnerInfo],
+    *,
+    cpu_test_dirs: list[str] | None = None,
 ) -> list[dict]:
     """Scan test directories and group tests by runner requirements.
 
@@ -294,6 +296,10 @@ def group_tests_by_runner(
           decorated files → function / class node IDs per runner;
           undecorated files → file paths in CPU group.
 
+    When *cpu_test_dirs* is provided, CPU (undecorated) tests are collected
+    from those directories instead of *test_dirs*, bypassing module filtering
+    for CPU tests while keeping NPU tests filtered.
+
     Exits with an error if any (num_npus, npu_type) combination cannot be
     matched to a runner in runner_label.json.
     """
@@ -301,6 +307,12 @@ def group_tests_by_runner(
 
     for test_dir in test_dirs:
         _scan_directory(test_dir, all_groups)
+
+    if cpu_test_dirs is not None:
+        cpu_groups: dict[RunnerKey, list[str]] = defaultdict(list)
+        for test_dir in cpu_test_dirs:
+            _scan_directory(test_dir, cpu_groups)
+        all_groups[_DEFAULT_KEY] = cpu_groups[_DEFAULT_KEY]
 
     return _resolve_groups(all_groups, runners)
 
@@ -488,6 +500,11 @@ def main():
         default=_CONFIG_PATH,
         help="Path to ut_config.yaml",
     )
+    parser.add_argument(
+        "--run-all-cpu",
+        action="store_true",
+        help="Run all CPU (undecorated) tests regardless of module filtering",
+    )
 
     args = parser.parse_args()
     config = yaml.safe_load(args.config.read_text())
@@ -497,7 +514,13 @@ def main():
     matched_modules = match_modules(changed_files, config)
     test_dirs = collect_test_dirs(matched_modules, config)
     runners = load_runners()
-    test_groups = group_tests_by_runner(test_dirs, runners)
+
+    cpu_test_dirs = None
+    if args.run_all_cpu:
+        all_module_names = [m["name"] for m in config]
+        cpu_test_dirs = collect_test_dirs(all_module_names, config)
+
+    test_groups = group_tests_by_runner(test_dirs, runners, cpu_test_dirs=cpu_test_dirs)
     write_output(test_groups, matched_modules)
 
 

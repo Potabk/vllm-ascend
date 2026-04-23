@@ -69,8 +69,10 @@ jobs:
           git config --global --add safe.directory /__w/vllm-ascend/vllm-ascend
           git fetch origin ${{ github.base_ref }}
           pip install pyyaml
+          # For now, we run full cpu tests, as the smart e2e test scope is not stable yet. In the future, we will enable smart test scope to further optimize the test time.
           python3 .github/workflows/scripts/determine_smart_e2e_scope.py \
-            --diff-base origin/${{ github.base_ref }}
+            --diff-base origin/${{ github.base_ref }} \
+            --run-all-cpu
 
       - name: Post scope summary
         if: ${{ steps.scope.outputs.has_tests == 'true' }}
@@ -177,13 +179,41 @@ jobs:
           uv pip install -v . --extra-index-url https://download.pytorch.org/whl/cpu/
           uv pip install -r requirements-dev.txt --extra-index-url https://download.pytorch.org/whl/cpu/
 
-      - name: Run smart UT
+      - name: Run smart UT with device
+        if: ${{ runner.arch != 'X64' }}
         env:
           VLLM_WORKER_MULTIPROC_METHOD: spawn
           PYTORCH_NPU_ALLOC_CONF: max_split_size_mb:256
         run: |
-          if [ "${{ runner.arch }}" = "X64" ]; then
-            export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/Ascend/ascend-toolkit/latest/x86_64-linux/devlib
-            export TORCH_DEVICE_BACKEND_AUTOLOAD=0
-          fi
+          echo -e "\033[1;34m=== Test targets ===\033[0m"
+          for target in ${{ matrix.group.tests }}; do
+            echo -e "  \033[32m-\033[0m ${target}"
+          done
+          echo -e "\033[1;34m====================\033[0m"
           pytest -sv ${{ matrix.group.tests }}
+
+
+      - name: Run smart UT without device
+        if: ${{ runner.arch == 'X64' }}
+        env:
+          VLLM_WORKER_MULTIPROC_METHOD: spawn
+          TORCH_DEVICE_BACKEND_AUTOLOAD: 0
+        shell: bash
+        run: |
+          export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/Ascend/ascend-toolkit/latest/x86_64-linux/devlib
+
+          echo -e "\033[1;34m=== Test targets ===\033[0m"
+          for target in ${{ matrix.group.tests }}; do
+            echo -e "  \033[32m-\033[0m ${target}"
+          done
+          echo -e "\033[1;34m====================\033[0m"
+          pytest -sv ${{ matrix.group.tests }} \
+            --ignore tests/ut/model_loader/netloader/test_netloader_elastic.py \
+            --ignore tests/ut/kv_connector/test_remote_prefill_lifecycle.py \
+            --ignore tests/ut/kv_connector/test_remote_decode_lifecycle.py \
+            --ignore tests/ut/core/test_scheduler_dynamic_batch.py \
+            --ignore tests/ut/kv_connector/test_mooncake_connector.py \
+            --ignore tests/ut/worker/test_worker_v1.py \
+            --ignore tests/ut/spec_decode/test_mtp_proposer.py \
+            --ignore tests/ut/kv_connector/test_mooncake_layerwise_connector.py \
+            --ignore tests/ut/worker/test_block_table.py \
