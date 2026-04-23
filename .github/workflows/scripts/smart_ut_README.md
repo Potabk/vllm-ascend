@@ -9,6 +9,7 @@ self-hosted runner based on `@npu_test` decorators.
 |------|------|
 | `determine_smart_e2e_scope.py` | Main script — scans changed files, parses decorators, outputs test groups |
 | `ut_config.yaml` | Maps source directories to their UT test directories |
+| `ut_blacklist.yaml` | Tests excluded from running (e.g. known CPU failures) |
 | `runner_label.json` | Defines available runners with chip type and NPU count |
 | `tests/ut/conftest.py` | Provides the `npu_test` decorator and `RunnerDeviceType` enum |
 
@@ -18,22 +19,25 @@ self-hosted runner based on `@npu_test` decorators.
 PR changed files
     │
     ▼
-ut_config.yaml ──► match_modules() ──► affected test directories
-                                             │
-                                             ▼
-                                    AST scan @npu_test decorators
-                                             │
-                                             ▼
-                              group by (num_npus, npu_type)
-                                             │
-                                             ▼
-                          runner_label.json ──► exact match to runner label
-                                             │
-                                             ▼
-                                    test_groups JSON output
-                                             │
-                                             ▼
-                              GitHub Actions matrix ──► runs-on: <runner>
+ut_config.yaml ──► match modules ──► affected test directories
+                                           │
+                                           ▼
+                                  AST scan @npu_test decorators
+                                           │
+                                           ▼
+                            group by (num_npus, npu_type)
+                                           │
+                                           ▼
+                        ut_blacklist.yaml ──► filter blacklisted tests + dedup
+                                           │
+                                           ▼
+                        runner_label.json ──► resolve to runner label
+                                           │
+                                           ▼
+                                  test_groups JSON output
+                                           │
+                                           ▼
+                            GitHub Actions matrix ──► runs-on: <runner>
 ```
 
 ## Usage
@@ -44,6 +48,9 @@ python determine_smart_e2e_scope.py --diff-base origin/main
 
 # Route based on an explicit list of changed files
 python determine_smart_e2e_scope.py --changed-files vllm_ascend/ops/foo.py vllm_ascend/worker/bar.py
+
+# Run all CPU tests regardless of module filtering (NPU tests still filtered)
+python determine_smart_e2e_scope.py --diff-base origin/main --run-all-cpu
 
 # Use a custom config file
 python determine_smart_e2e_scope.py --diff-base origin/main --config path/to/ut_config.yaml
@@ -138,6 +145,23 @@ ERROR: The following @npu_test decorator combinations cannot be routed to any ru
       - tests/ut/ops/test_foo.py::test_bar
 ```
 
+## Blacklist
+
+Tests listed in `ut_blacklist.yaml` are excluded from **all** runner groups
+before the final output. This is the first-priority filter — blacklisted tests
+will never appear in `test_groups`, regardless of module matching or
+`--run-all-cpu`.
+
+```yaml
+# ut_blacklist.yaml
+- tests/ut/worker/test_worker_v1.py
+- tests/ut/kv_connector/test_remote_prefill_lifecycle.py
+```
+
+When a blacklisted file is inside a directory target (e.g. `tests/ut/kv_connector`),
+the directory is automatically expanded to individual files with the blacklisted
+ones removed.
+
 ## Adding a New Module
 
 Add an entry to `ut_config.yaml`:
@@ -154,3 +178,12 @@ Add an entry to `ut_config.yaml`:
 
 - `optional: true` — tests run only when the source files change.
 - `optional: false` — tests always run on every PR (e.g. `worker`, `dummy`).
+
+## `--run-all-cpu` Mode
+
+When this flag is passed, **all** CPU (undecorated) tests from every module in
+`ut_config.yaml` are included, bypassing module-level filtering. NPU tests are
+still filtered by matched modules. This is useful during the early stage when
+the module filtering mechanism is not yet mature enough for CPU tests.
+
+Remove the flag from the workflow to restore CPU-side module filtering.

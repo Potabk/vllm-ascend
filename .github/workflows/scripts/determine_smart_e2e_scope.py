@@ -16,33 +16,23 @@
 #
 """Determine which UT tests to run based on changed files in a PR.
 
-This script reads ut_config.yaml to understand the mapping between source
-directories and their corresponding UT test directories.  Given a list of
-changed files (from git diff), it identifies which modules are affected,
-scans test files for ``@npu_test`` decorators, and groups tests by
-(num_npus, npu_type) so the workflow can route them to the correct runner.
-
-Routing rules:
-  - Tests decorated with ``@npu_test(num_npus=N, npu_type=T)`` are routed
-    to the runner that exactly matches (T, N) in runner_label.json.
-  - Tests **without** ``@npu_test`` are routed to the CPU runner.
-  - For class-based tests the decorator goes on the **class**, and the
-    output is the class-level node ID (``file::Class``).
-
-Output granularity:
-  - Directory whose files are ALL undecorated → directory path.
-  - Mixed directory (some files have ``@npu_test``) →
-      decorated files: function / class node IDs per runner;
-      undecorated files: file paths in the CPU group.
+Pipeline:
+  1. Diff       — get changed files from git.
+  2. Match      — identify affected modules via ut_config.yaml.
+  3. Collect    — gather test directories for matched modules.
+  4. Scan       — AST-parse test files for @npu_test decorators.
+  5. Group      — bucket tests by (num_npus, npu_type).
+  6. Filter     — remove blacklisted tests, deduplicate.
+  7. Resolve    — map each group to a runner via runner_label.json.
+  8. Output     — write test_groups / has_tests / matched_modules.
 
 Usage:
-    python determine_smart_e2e_scope.py --changed-files file1.py file2.py
     python determine_smart_e2e_scope.py --diff-base origin/main
+    python determine_smart_e2e_scope.py --changed-files file1.py file2.py
 
-Output (written to $GITHUB_OUTPUT if available, otherwise stdout):
-    test_groups=<JSON array of {num_npus, npu_type, runner, tests}>
-    has_tests=true/false
-    matched_modules=<comma-separated module names>
+Flags:
+    --run-all-cpu   Run ALL CPU (undecorated) tests regardless of module
+                    filtering.  NPU tests are still filtered by module.
 """
 
 from __future__ import annotations
@@ -61,16 +51,17 @@ from pathlib import Path
 import yaml
 
 # ---------------------------------------------------------------------------
-# Constants & types
+# 1. Constants & types
 # ---------------------------------------------------------------------------
 
 _SCRIPT_DIR = Path(__file__).parent
 _CONFIG_PATH = _SCRIPT_DIR / "ut_config.yaml"
 _RUNNER_LABEL_PATH = _SCRIPT_DIR / "runner_label.json"
+_BLACKLIST_PATH = _SCRIPT_DIR / "ut_blacklist.yaml"
 
 
 class RunnerDeviceType(str, Enum):
-    """Chip types — values must match runner_label.json ``chip`` field exactly.
+    """Chip types — values must match runner_label.json ``chip`` field.
 
     Shared by:
       - tests/ut/conftest.py  (``npu_test`` decorator)
@@ -101,11 +92,11 @@ class RunnerInfo:
 
 
 # ---------------------------------------------------------------------------
-# Runner resolution
+# 2. Configuration loading
 # ---------------------------------------------------------------------------
 
 
-def load_runners() -> list[RunnerInfo]:
+def _load_runners() -> list[RunnerInfo]:
     """Load runner definitions from runner_label.json."""
     with open(_RUNNER_LABEL_PATH) as f:
         raw = json.load(f)
@@ -120,33 +111,23 @@ def load_runners() -> list[RunnerInfo]:
     ]
 
 
-def resolve_runner(
-    num_npus: int,
-    npu_type: RunnerDeviceType,
-    runners: list[RunnerInfo],
-) -> RunnerInfo | None:
-    """Find the exact matching runner for the given NPU requirements.
+def _load_blacklist() -> set[str]:
+    """Load blacklisted test file paths from ut_blacklist.yaml.
 
-    For NPU types: exact match on (npu_type, num_npus).
-    For CPU type:  match any CPU runner.
-
-    Returns None if no matching runner exists.
+    Returns an empty set if the file does not exist.
     """
-    if npu_type == RunnerDeviceType.CPU:
-        candidates = [r for r in runners if r.npu_type == RunnerDeviceType.CPU]
-    else:
-        candidates = [r for r in runners if r.npu_type == npu_type and r.num_npus == num_npus]
-    if not candidates:
-        return None
-    return candidates[0]
+    if not _BLACKLIST_PATH.exists():
+        return set()
+    items = yaml.safe_load(_BLACKLIST_PATH.read_text()) or []
+    return set(items)
 
 
 # ---------------------------------------------------------------------------
-# Git & module matching
+# 3. Changed files & module matching
 # ---------------------------------------------------------------------------
 
 
-def get_changed_files(base_ref: str) -> list[str]:
+def _get_changed_files(base_ref: str) -> list[str]:
     """Return the list of changed files by diffing against *base_ref*."""
     result = subprocess.run(
         ["git", "diff", "--name-only", f"{base_ref}...HEAD"],
@@ -157,16 +138,7 @@ def get_changed_files(base_ref: str) -> list[str]:
     return [f for f in result.stdout.strip().split("\n") if f]
 
 
-def _any_file_matches(changed_files: list[str], deps: list[str]) -> bool:
-    """Return True if any changed file falls under any dependency prefix."""
-    for changed in changed_files:
-        for dep in deps:
-            if changed == dep or changed.startswith(dep + "/"):
-                return True
-    return False
-
-
-def match_modules(
+def _match_modules(
     changed_files: list[str],
     config: list[dict],
 ) -> list[str]:
@@ -176,35 +148,35 @@ def match_modules(
     - ``optional: true``  → included only when a changed file falls under
       one of the module's ``source_file_dependencies``.
     """
-    matched: list[str] = []
     if not changed_files:
-        return matched
+        return []
 
+    matched: list[str] = []
     for module in config:
         if not module.get("optional", True):
             matched.append(module["name"])
             continue
         deps = module.get("source_file_dependencies", [])
-        if _any_file_matches(changed_files, deps):
+        if any(f == dep or f.startswith(dep + "/") for f in changed_files for dep in deps):
             matched.append(module["name"])
     return matched
 
 
-def collect_test_dirs(
-    matched_modules: list[str],
+def _collect_test_dirs(
+    module_names: list[str],
     config: list[dict],
 ) -> list[str]:
-    """Collect deduplicated test directory paths for matched modules."""
+    """Collect deduplicated test directory paths for the given modules."""
     module_map = {m["name"]: m for m in config}
     test_dirs: set[str] = set()
-    for name in matched_modules:
+    for name in module_names:
         for path in module_map[name].get("tests", []):
             test_dirs.add(path)
     return sorted(test_dirs)
 
 
 # ---------------------------------------------------------------------------
-# AST scanning: extract @npu_test decorator info from test files
+# 4. AST scanning — extract @npu_test decorator info from test files
 # ---------------------------------------------------------------------------
 
 
@@ -222,9 +194,7 @@ def _resolve_npu_type_from_ast(node: ast.expr) -> RunnerDeviceType:
     raise ValueError(f"Cannot resolve npu_type from AST node: {ast.dump(node)}")
 
 
-def _extract_runner_key(
-    node: ast.FunctionDef | ast.ClassDef,
-) -> RunnerKey:
+def _extract_runner_key(node: ast.FunctionDef | ast.ClassDef) -> RunnerKey:
     """Extract (num_npus, npu_type) from ``@npu_test`` on *node*.
 
     Returns ``_DEFAULT_KEY`` when no ``@npu_test`` decorator is found.
@@ -234,8 +204,8 @@ def _extract_runner_key(
     for decorator in node.decorator_list:
         if not isinstance(decorator, ast.Call):
             continue
-        decorator_func = decorator.func
-        if not (isinstance(decorator_func, ast.Name) and decorator_func.id == "npu_test"):
+        func = decorator.func
+        if not (isinstance(func, ast.Name) and func.id == "npu_test"):
             continue
 
         num_npus = 1
@@ -250,7 +220,7 @@ def _extract_runner_key(
     return _DEFAULT_KEY
 
 
-def scan_test_file(filepath: str) -> dict[RunnerKey, list[str]]:
+def _scan_test_file(filepath: str) -> dict[RunnerKey, list[str]]:
     """Parse a single test file and group node IDs by runner key.
 
     - Top-level ``test_*`` functions → keyed by their own ``@npu_test``.
@@ -266,9 +236,8 @@ def scan_test_file(filepath: str) -> dict[RunnerKey, list[str]]:
         return {}
 
     groups: dict[RunnerKey, list[str]] = defaultdict(list)
-
     for node in ast.iter_child_nodes(tree):
-        if isinstance(node, ast.FunctionDef) and node.name.startswith("test_") or isinstance(node, ast.ClassDef):
+        if (isinstance(node, ast.FunctionDef) and node.name.startswith("test_")) or isinstance(node, ast.ClassDef):
             key = _extract_runner_key(node)
             groups[key].append(f"{filepath}::{node.name}")
 
@@ -276,90 +245,134 @@ def scan_test_file(filepath: str) -> dict[RunnerKey, list[str]]:
 
 
 # ---------------------------------------------------------------------------
-# Grouping & runner resolution
+# 5. Test grouping pipeline — scan → filter → resolve
 # ---------------------------------------------------------------------------
 
 
-def group_tests_by_runner(
+def _build_test_groups(
     test_dirs: list[str],
     runners: list[RunnerInfo],
+    blacklist: set[str],
     *,
     cpu_test_dirs: list[str] | None = None,
 ) -> list[dict]:
-    """Scan test directories and group tests by runner requirements.
+    """Main grouping pipeline: scan, filter, resolve.
 
-    Output granularity depends on whether a directory contains ``@npu_test``:
-
-    - **Pure-default directory** (no ``@npu_test`` anywhere):
-          directory path → CPU group.
-    - **Mixed directory** (some files have ``@npu_test``):
-          decorated files → function / class node IDs per runner;
-          undecorated files → file paths in CPU group.
-
-    When *cpu_test_dirs* is provided, CPU (undecorated) tests are collected
-    from those directories instead of *test_dirs*, bypassing module filtering
-    for CPU tests while keeping NPU tests filtered.
-
-    Exits with an error if any (num_npus, npu_type) combination cannot be
-    matched to a runner in runner_label.json.
+    Steps:
+      1. Scan *test_dirs* — group tests by (num_npus, npu_type).
+      2. If *cpu_test_dirs* is provided, replace the CPU group with a
+         full scan of those directories (--run-all-cpu mode).
+      3. Apply blacklist — remove blacklisted tests and deduplicate.
+      4. Resolve each group to a runner from runner_label.json.
     """
+    # Step 1: scan matched test directories
     all_groups: dict[RunnerKey, list[str]] = defaultdict(list)
-
     for test_dir in test_dirs:
         _scan_directory(test_dir, all_groups)
 
+    # Step 2: override CPU group when --run-all-cpu
     if cpu_test_dirs is not None:
         cpu_groups: dict[RunnerKey, list[str]] = defaultdict(list)
         for test_dir in cpu_test_dirs:
             _scan_directory(test_dir, cpu_groups)
         all_groups[_DEFAULT_KEY] = cpu_groups[_DEFAULT_KEY]
 
-    return _resolve_groups(all_groups, runners)
+    # Step 3: blacklist + dedup
+    _apply_blacklist(all_groups, blacklist)
+
+    # Step 4: resolve to runners
+    return _resolve_to_runners(all_groups, runners)
 
 
 def _scan_directory(
     test_dir: str,
-    all_groups: dict[RunnerKey, list[str]],
+    groups: dict[RunnerKey, list[str]],
 ) -> None:
-    """Scan a single test directory and populate *all_groups* in place."""
+    """Scan a single test directory and populate *groups* in place.
+
+    Output granularity:
+      - Pure-default directory (no @npu_test) → directory path in CPU group.
+      - Mixed directory → decorated node IDs per runner; undecorated file
+        paths in CPU group.
+    """
     dir_path = Path(test_dir)
     if not dir_path.exists():
-        all_groups[_DEFAULT_KEY].append(test_dir)
+        groups[_DEFAULT_KEY].append(test_dir)
         return
 
-    has_decorated_tests = False
+    has_decorated = False
     undecorated_files: list[str] = []
 
     for test_file in sorted(dir_path.rglob("test_*.py")):
         file_path = str(test_file)
-        file_groups = scan_test_file(file_path)
+        file_groups = _scan_test_file(file_path)
 
         if not file_groups:
             undecorated_files.append(file_path)
             continue
 
         if any(key != _DEFAULT_KEY for key in file_groups):
-            has_decorated_tests = True
+            has_decorated = True
             for key, node_ids in file_groups.items():
-                all_groups[key].extend(node_ids)
+                groups[key].extend(node_ids)
         else:
             undecorated_files.append(file_path)
 
-    if not has_decorated_tests:
-        # Entire directory is undecorated → single directory path
-        all_groups[_DEFAULT_KEY].append(test_dir)
+    if not has_decorated:
+        groups[_DEFAULT_KEY].append(test_dir)
     else:
-        # Mixed directory → keep undecorated files as file-level paths
-        all_groups[_DEFAULT_KEY].extend(undecorated_files)
+        groups[_DEFAULT_KEY].extend(undecorated_files)
 
 
-def _resolve_groups(
+def _apply_blacklist(
+    all_groups: dict[RunnerKey, list[str]],
+    blacklist: set[str],
+) -> None:
+    """Remove blacklisted tests from all groups and deduplicate in place.
+
+    Handles three target formats:
+      - File path  — drop if the path is in the blacklist.
+      - Node ID    — drop if the file part (before ``::``) is blacklisted.
+      - Directory  — if it contains blacklisted files, expand to individual
+                     files excluding the blacklisted ones.
+    """
+    for key in list(all_groups.keys()):
+        filtered: list[str] = []
+        seen: set[str] = set()
+
+        for target in all_groups[key]:
+            file_path = target.split("::")[0]
+
+            # Skip blacklisted file or node
+            if file_path in blacklist:
+                continue
+
+            # Directory containing blacklisted files → expand
+            target_path = Path(file_path)
+            if blacklist and target_path.is_dir():
+                if any(bl.startswith(file_path + "/") for bl in blacklist):
+                    for f in sorted(target_path.rglob("test_*.py")):
+                        name = str(f)
+                        if name not in blacklist and name not in seen:
+                            filtered.append(name)
+                            seen.add(name)
+                    continue
+
+            # Deduplicate
+            if target not in seen:
+                filtered.append(target)
+                seen.add(target)
+
+        all_groups[key] = filtered
+
+
+def _resolve_to_runners(
     all_groups: dict[RunnerKey, list[str]],
     runners: list[RunnerInfo],
 ) -> list[dict]:
-    """Convert internal groups to output dicts with runner labels.
+    """Map each (num_npus, npu_type) group to a runner.
 
-    Exits with a descriptive error if any group cannot be resolved.
+    Exits with a descriptive error if any group cannot be matched.
     """
     result: list[dict] = []
     errors: list[str] = []
@@ -368,19 +381,19 @@ def _resolve_groups(
         if not tests:
             continue
 
-        runner_info = resolve_runner(num_npus, npu_type, runners)
-        if runner_info is None:
+        runner = _find_runner(num_npus, npu_type, runners)
+        if runner is None:
             errors.append(_format_runner_error(num_npus, npu_type, tests, runners))
             continue
 
         group = {
             "num_npus": num_npus,
             "npu_type": npu_type.value,
-            "runner": runner_info.label,
-            "tests": " ".join(sorted(set(tests))),
+            "runner": runner.label,
+            "tests": " ".join(sorted(tests)),
         }
-        if runner_info.image_tag:
-            group["image_tag"] = runner_info.image_tag
+        if runner.image_tag:
+            group["image_tag"] = runner.image_tag
         result.append(group)
 
     if errors:
@@ -397,6 +410,23 @@ def _resolve_groups(
     return result
 
 
+def _find_runner(
+    num_npus: int,
+    npu_type: RunnerDeviceType,
+    runners: list[RunnerInfo],
+) -> RunnerInfo | None:
+    """Find the runner that matches the given NPU requirements.
+
+    CPU type: match any CPU runner.
+    NPU type: exact match on (npu_type, num_npus).
+    """
+    if npu_type == RunnerDeviceType.CPU:
+        candidates = [r for r in runners if r.npu_type == RunnerDeviceType.CPU]
+    else:
+        candidates = [r for r in runners if r.npu_type == npu_type and r.num_npus == num_npus]
+    return candidates[0] if candidates else None
+
+
 def _format_runner_error(
     num_npus: int,
     npu_type: RunnerDeviceType,
@@ -411,18 +441,19 @@ def _format_runner_error(
         if available
         else f'\n    No runners defined for chip type "{npu_type.value}".'
     )
-    tests_line = "\n    Affected tests:\n" + "\n".join(f"      - {t}" for t in sorted(set(tests)))
+    tests_line = "\n    Affected tests:\n" + "\n".join(f"      - {t}" for t in sorted(tests))
     return header + runners_line + tests_line
 
 
 # ---------------------------------------------------------------------------
-# Output
+# 6. Output
 # ---------------------------------------------------------------------------
 
 
-def write_output(
+def _write_output(
     test_groups: list[dict],
     matched_modules: list[str],
+    blacklist: set[str],
 ) -> None:
     """Write step outputs to $GITHUB_OUTPUT (or stdout when running locally)."""
     has_tests = len(test_groups) > 0
@@ -443,12 +474,13 @@ def write_output(
         for key, value in outputs.items():
             print(f"{key}={value}")
 
-    _print_summary(test_groups, matched_modules, has_tests)
+    _print_summary(test_groups, matched_modules, blacklist, has_tests)
 
 
 def _print_summary(
     test_groups: list[dict],
     matched_modules: list[str],
+    blacklist: set[str],
     has_tests: bool,
 ) -> None:
     """Print a human-readable summary to stderr for CI logs."""
@@ -458,6 +490,11 @@ def _print_summary(
     print(divider, file=sys.stderr)
     print(f"Matched modules: {matched_modules or '(none)'}", file=sys.stderr)
     print(f"Has tests to run: {has_tests}", file=sys.stderr)
+
+    if blacklist:
+        print(f"\n  Blacklisted ({len(blacklist)} tests):", file=sys.stderr)
+        for bl in sorted(blacklist):
+            print(f"    - {bl}", file=sys.stderr)
 
     for group in test_groups:
         npu_type = group["npu_type"]
@@ -475,7 +512,7 @@ def _print_summary(
 
 
 # ---------------------------------------------------------------------------
-# Entry point
+# 7. Entry point
 # ---------------------------------------------------------------------------
 
 
@@ -509,19 +546,21 @@ def main():
     args = parser.parse_args()
     config = yaml.safe_load(args.config.read_text())
 
-    changed_files = get_changed_files(args.diff_base) if args.diff_base else args.changed_files
-
-    matched_modules = match_modules(changed_files, config)
-    test_dirs = collect_test_dirs(matched_modules, config)
-    runners = load_runners()
+    # --- Pipeline ---
+    changed_files = _get_changed_files(args.diff_base) if args.diff_base else args.changed_files
+    matched_modules = _match_modules(changed_files, config)
+    test_dirs = _collect_test_dirs(matched_modules, config)
 
     cpu_test_dirs = None
     if args.run_all_cpu:
         all_module_names = [m["name"] for m in config]
-        cpu_test_dirs = collect_test_dirs(all_module_names, config)
+        cpu_test_dirs = _collect_test_dirs(all_module_names, config)
 
-    test_groups = group_tests_by_runner(test_dirs, runners, cpu_test_dirs=cpu_test_dirs)
-    write_output(test_groups, matched_modules)
+    runners = _load_runners()
+    blacklist = _load_blacklist()
+    test_groups = _build_test_groups(test_dirs, runners, blacklist, cpu_test_dirs=cpu_test_dirs)
+
+    _write_output(test_groups, matched_modules, blacklist)
 
 
 if __name__ == "__main__":
