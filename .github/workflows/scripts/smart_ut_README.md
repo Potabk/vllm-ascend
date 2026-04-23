@@ -21,7 +21,7 @@ This will be addressed from two main perspectives:
 
 ## How It Works
 
-```
+```shell
 PR changed files
     │
     ▼
@@ -66,7 +66,7 @@ python determine_smart_e2e_scope.py --diff-base origin/main --config path/to/ut_
 
 Written to `$GITHUB_OUTPUT` in CI, or stdout locally:
 
-```
+```shell
 test_groups=[{"num_npus":1,"npu_type":"a2","runner":"linux-aarch64-a2b3-1","tests":"tests/ut/ops/test_layernorm.py::test_rms_norm"}]
 has_tests=true
 matched_modules=ops,worker
@@ -142,7 +142,7 @@ listing the affected tests and available runners for that chip type.
 
 Example error:
 
-```
+```shell
 ERROR: The following @npu_test decorator combinations cannot be routed to any runner in runner_label.json:
 
   @npu_test(num_npus=1, npu_type="a3") — no runner available.
