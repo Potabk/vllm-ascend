@@ -21,9 +21,10 @@ from enum import Enum
 from unittest.mock import MagicMock
 
 import pytest
-import torch
 
 try:
+    import torch  # noqa
+
     _npu_available = torch.npu.is_available()
 except AttributeError:
     _npu_available = False
