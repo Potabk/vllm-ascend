@@ -1,7 +1,13 @@
 # Smart UT Test Router
 
-Automatically determines which UT tests to run and routes them to the correct
-self-hosted runner based on `@npu_test` decorators.
+This document aims to introduce the usage and basic operating rules of `Smart UT` and hopes to reach a consensus with you to ensure that we can correctly place test cases according to the agreed-upon conventions when adding test cases later.
+We've long been plagued by excessively long end-to-end testing durations, which is extremely detrimental to community health and developer well-being. We aim to implement selective testing based on developer pull requests (PRs):
+
+This will be addressed from two main perspectives:
+
+1. Intelligently selecting test cases to trigger based on developer modifications. This is easily achievable; we simply need to ensure a one-to-one correspondence between the test directory (tests/ut) and the modules in the src directory. Furthermore, for some common, fundamental modules, we will allow them to be unconditionally tested in every PR (this is meaningful because certain modules...).
+
+2. Stateful test cases that developers are aware of. Developers only need to add a `@npu_test` decorator to specify the required NPU device type and number of chips. The system will automatically route this test case to an appropriate node for testing. I will elaborate on this point below.
 
 ## Files
 
