@@ -77,15 +77,48 @@ jobs:
       - name: Post scope summary
         if: ${{ steps.scope.outputs.has_tests == 'true' }}
         run: |
-          {
-            echo "## Smart E2E Test Scope"
-            echo ""
-            echo "**Matched modules:** ${{ steps.scope.outputs.matched_modules }}"
-            echo ""
-            echo '```json'
-            echo '${{ steps.scope.outputs.test_groups }}' | python3 -m json.tool
-            echo '```'
-          } >> $GITHUB_STEP_SUMMARY
+          python3 -c "
+          import json, yaml
+          from pathlib import Path
+
+          groups = json.loads('${{ steps.scope.outputs.test_groups }}')
+          modules = '${{ steps.scope.outputs.matched_modules }}'
+          blacklist_path = Path('.github/workflows/scripts/ut_blacklist.yaml')
+          blacklist = yaml.safe_load(blacklist_path.read_text()) if blacklist_path.exists() else []
+
+          lines = ['## Smart UT Test Scope', '']
+          lines.append(f'**Matched modules:** {modules}')
+          lines.append('')
+
+          if blacklist:
+              lines.append('<details>')
+              lines.append(f'<summary>Blacklisted ({len(blacklist)} tests)</summary>')
+              lines.append('')
+              for bl in sorted(blacklist):
+                  lines.append(f'- \`{bl}\`')
+              lines.append('')
+              lines.append('</details>')
+              lines.append('')
+
+          for g in groups:
+              npu_type = g['npu_type']
+              num_npus = g['num_npus']
+              runner = g['runner']
+              tests = g['tests'].split()
+              if npu_type == 'cpu':
+                  header = f'### CPU ({len(tests)} tests) \u2192 \`{runner}\`'
+              else:
+                  header = f'### {npu_type.upper()} x{num_npus} ({len(tests)} tests) \u2192 \`{runner}\`'
+              lines.append(header)
+              lines.append('')
+              lines.append('| # | Test target |')
+              lines.append('|---|------------|')
+              for i, t in enumerate(tests, 1):
+                  lines.append(f'| {i} | \`{t}\` |')
+              lines.append('')
+
+          print('\n'.join(lines))
+          " >> $GITHUB_STEP_SUMMARY
 
   smart-ut-test:
     name: smart-ut (${{ matrix.group.npu_type }} x${{ matrix.group.num_npus }})
