@@ -186,11 +186,16 @@ jobs:
           PYTORCH_NPU_ALLOC_CONF: max_split_size_mb:256
         run: |
           echo -e "\033[1;34m=== Test targets ===\033[0m"
+          echo -e "  \033[33mDevice:\033[0m ${{ matrix.group.npu_type }}"
+          if [ "${{ matrix.group.npu_type }}" != "cpu" ]; then
+            echo -e "  \033[33mNPU count:\033[0m ${{ matrix.group.num_npus }}"
+          fi
+          echo -e "  \033[33mTargets:\033[0m"
           for target in ${{ matrix.group.tests }}; do
-            echo -e "  \033[32m-\033[0m ${target}"
+            echo -e "    \033[32m-\033[0m ${target}"
           done
           echo -e "\033[1;34m====================\033[0m"
-          pytest -sv ${{ matrix.group.tests }}
+          pytest -sv --color=yes ${{ matrix.group.tests }}
 
 
       - name: Run smart UT without device
@@ -203,11 +208,16 @@ jobs:
           export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/Ascend/ascend-toolkit/latest/x86_64-linux/devlib
 
           echo -e "\033[1;34m=== Test targets ===\033[0m"
+          echo -e "  \033[33mDevice:\033[0m ${{ matrix.group.npu_type }}"
+          if [ "${{ matrix.group.npu_type }}" != "cpu" ]; then
+            echo -e "  \033[33mNPU count:\033[0m ${{ matrix.group.num_npus }}"
+          fi
+          echo -e "  \033[33mTargets:\033[0m"
           for target in ${{ matrix.group.tests }}; do
-            echo -e "  \033[32m-\033[0m ${target}"
+            echo -e "    \033[32m-\033[0m ${target}"
           done
           echo -e "\033[1;34m====================\033[0m"
-          pytest -sv ${{ matrix.group.tests }} \
+          pytest -sv --color=yes ${{ matrix.group.tests }} \
             --ignore tests/ut/model_loader/netloader/test_netloader_elastic.py \
             --ignore tests/ut/kv_connector/test_remote_prefill_lifecycle.py \
             --ignore tests/ut/kv_connector/test_remote_decode_lifecycle.py \
