@@ -76,13 +76,16 @@ jobs:
 
       - name: Post scope summary
         if: ${{ steps.scope.outputs.has_tests == 'true' }}
+        env:
+          TEST_GROUPS: ${{ steps.scope.outputs.test_groups }}
+          MATCHED_MODULES: ${{ steps.scope.outputs.matched_modules }}
         run: |
           python3 -c "
-          import json, yaml
+          import json, os, yaml
           from pathlib import Path
 
-          groups = json.loads('${{ steps.scope.outputs.test_groups }}')
-          modules = '${{ steps.scope.outputs.matched_modules }}'
+          groups = json.loads(os.environ['TEST_GROUPS'])
+          modules = os.environ['MATCHED_MODULES']
           blacklist_path = Path('.github/workflows/scripts/ut_blacklist.yaml')
           blacklist = yaml.safe_load(blacklist_path.read_text()) if blacklist_path.exists() else []
 
