@@ -185,5 +185,4 @@ jobs:
           if [ "${{ runner.arch }}" = "X64" ]; then
             export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/Ascend/ascend-toolkit/latest/x86_64-linux/devlib
           fi
-          sleep 1000
           pytest -sv ${{ matrix.group.tests }}
