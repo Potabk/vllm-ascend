@@ -83,8 +83,3 @@ def test_dummy_with_a3():
 
 def test_dummy_without_npu():
     assert True
-
-
-@npu_test(num_npus=1, npu_type="310p")
-def test_dummy_with_310():
-    assert True

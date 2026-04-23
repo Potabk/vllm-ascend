@@ -31,7 +31,8 @@
     },
     "linux-amd64-cpu-8-hk": {
         "chip": "cpu",
-        "npu_num": 0
+        "npu_num": 0,
+        "image_tag": "8.5.1-910b-ubuntu22.04-py3.11"
     },
     "linux-aarch64-a2b3-1": {
         "chip": "a2",

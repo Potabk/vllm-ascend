@@ -99,9 +99,7 @@ jobs:
       env:
         VLLM_LOGGING_LEVEL: ERROR
         VLLM_USE_MODELSCOPE: True
-        SOC_VERSION: ascend910b1
         MAX_JOBS: 4
-        COMPILE_CUSTOM_KERNELS: 0
         UV_INDEX_URL: http://cache-service.nginx-pypi-cache.svc.cluster.local/pypi/simple
         UV_EXTRA_INDEX_URL: https://mirrors.huaweicloud.com/ascend/repos/pypi
         UV_INDEX_STRATEGY: unsafe-best-match
@@ -129,7 +127,7 @@ jobs:
       - name: Install vllm-project/vllm from source
         working-directory: ./vllm-empty
         run: |
-          VLLM_TARGET_DEVICE=empty uv pip install . --extra-index-url https://download.pytorch.org/whl/cpu/
+          VLLM_TARGET_DEVICE=empty uv pip install . ${{ runner.arch == 'X64' && '--extra-index-url https://download.pytorch.org/whl/cpu/' || '' }}
           uv pip uninstall triton
 
       - name: Checkout vllm-project/vllm-ascend repo
@@ -143,6 +141,7 @@ jobs:
           echo "CSRC_HASH=$CSRC_HASH" >> $GITHUB_OUTPUT
 
       - name: Cache vllm-ascend csrc
+        if: ${{ runner.arch != 'X64' }}
         uses: runs-on/cache@v4
         with:
           path: |
@@ -155,6 +154,7 @@ jobs:
             vllm-ascend-build-v1-${{ runner.os }}-swr.cn-southwest-2.myhuaweicloud.com/base_image/ascend-ci/cann:${{ matrix.group.image_tag }}-${{ steps.get_csrc_hash.outputs.CSRC_HASH }}
 
       - name: Install vllm-project/vllm-ascend
+        if: ${{ runner.arch != 'X64' }}
         env:
           PIP_EXTRA_INDEX_URL: https://mirrors.huaweicloud.com/ascend/repos/pypi
         run: |
@@ -165,10 +165,25 @@ jobs:
           else
             uv pip install -v -e .
           fi
+
+      - name: Install vllm-project/vllm-ascend
+        if: ${{ runner.arch == 'X64' }}
+        env:
+          SOC_VERSION: ascend910b1
+          COMPILE_CUSTOM_KERNELS: 0
+        run: |
+          pip install uc-manager
+          export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/Ascend/ascend-toolkit/latest/x86_64-linux/devlib
+          uv pip install -v . --extra-index-url https://download.pytorch.org/whl/cpu/
+          uv pip install -r requirements-dev.txt --extra-index-url https://download.pytorch.org/whl/cpu/
+
       - name: Run smart UT
         env:
           VLLM_WORKER_MULTIPROC_METHOD: spawn
           TORCH_DEVICE_BACKEND_AUTOLOAD: 0
         run: |
-          export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/Ascend/ascend-toolkit/latest/x86_64-linux/devlib
+          if [ "${{ runner.arch }}" = "X64" ]; then
+            export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/Ascend/ascend-toolkit/latest/x86_64-linux/devlib
+          fi
+          sleep 1000
           pytest -sv ${{ matrix.group.tests }}

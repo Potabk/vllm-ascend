@@ -23,7 +23,12 @@ from unittest.mock import MagicMock
 import pytest
 import torch
 
-if not torch.npu.is_available():
+try:
+    _npu_available = torch.npu.is_available()
+except AttributeError:
+    _npu_available = False
+
+if not _npu_available:
     triton_runtime = MagicMock()
     triton_runtime.driver.active.utils.get_device_properties.return_value = {
         "num_aic": 8,
@@ -31,6 +36,8 @@ if not torch.npu.is_available():
     }
     sys.modules["triton.runtime"] = triton_runtime
     # triton and torch_npu is not available in the environment, so we need to mock them
+    if "torch_npu" not in sys.modules:
+        sys.modules["torch_npu"] = MagicMock()
     sys.modules["torch_npu"].npu.current_device = MagicMock(return_value=0)
     sys.modules["torch_npu._inductor"] = MagicMock()
 
