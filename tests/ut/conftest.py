@@ -24,6 +24,7 @@ from unittest.mock import MagicMock
 import pytest
 
 try:
+    # Note: do not import torch here for cpu env, which will lead to circle import error.
     subprocess.run(["npu-smi", "info"], capture_output=True, check=True)
     _npu_available = True
 except (subprocess.CalledProcessError, FileNotFoundError):
@@ -36,15 +37,14 @@ if not _npu_available:
         "num_vectorcore": 8,
     }
     sys.modules["triton.runtime"] = triton_runtime
-    # triton and torch_npu is not available in the environment, so we need to mock them
-    if "torch_npu" not in sys.modules:
-        sys.modules["torch_npu"] = MagicMock()
-    sys.modules["torch_npu"].npu.current_device = MagicMock(return_value=0)
-    sys.modules["torch_npu._inductor"] = MagicMock()
 
 from vllm_ascend.utils import adapt_patch  # noqa E402
 from vllm_ascend.utils import register_ascend_customop  # noqa E402
 
+# Mock torch_npu AFTER vllm_ascend import to avoid circular import in accelerate
+if not _npu_available:
+    sys.modules["torch_npu"].npu.current_device = MagicMock(return_value=0)
+    sys.modules["torch_npu._inductor"] = MagicMock()
 
 adapt_patch()
 adapt_patch(True)
