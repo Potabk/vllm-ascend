@@ -16,6 +16,7 @@
 # This file is a part of the vllm-ascend project.
 #
 import functools
+import subprocess
 import sys
 from enum import Enum
 from unittest.mock import MagicMock
@@ -23,10 +24,9 @@ from unittest.mock import MagicMock
 import pytest
 
 try:
-    import torch  # noqa
-
-    _npu_available = torch.npu.is_available()
-except AttributeError:
+    subprocess.run(["npu-smi", "info"], capture_output=True, check=True)
+    _npu_available = True
+except (subprocess.CalledProcessError, FileNotFoundError):
     _npu_available = False
 
 if not _npu_available:
@@ -90,8 +90,10 @@ def npu_test(num_npus: int = 1, npu_type: RunnerDeviceType = RunnerDeviceType.A2
         def wrapper(*args, **kwargs):
             if npu_type == RunnerDeviceType.CPU:
                 return func(*args, **kwargs)
-            if not torch.npu.is_available():
+            if not _npu_available:
                 pytest.skip(f"NPU not available (need {npu_type.value} x{num_npus})")
+            import torch  # noqa
+
             device_count = torch.npu.device_count()
             if device_count < num_npus:
                 pytest.skip(f"Not enough NPUs: need {num_npus}, have {device_count}")
