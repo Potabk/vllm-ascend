@@ -180,9 +180,10 @@ jobs:
       - name: Run smart UT
         env:
           VLLM_WORKER_MULTIPROC_METHOD: spawn
-          TORCH_DEVICE_BACKEND_AUTOLOAD: 0
+          PYTORCH_NPU_ALLOC_CONF: max_split_size_mb:256
         run: |
           if [ "${{ runner.arch }}" = "X64" ]; then
             export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/Ascend/ascend-toolkit/latest/x86_64-linux/devlib
+            export TORCH_DEVICE_BACKEND_AUTOLOAD=0
           fi
           pytest -sv ${{ matrix.group.tests }}
