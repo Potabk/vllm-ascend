@@ -27,7 +27,7 @@ gumbel.apply_temperature = apply_temperature
 states.apply_temperature = apply_temperature
 logprob.compute_token_logprobs = compute_token_logprobs
 
-if not vllm_version_is("0.20.1"):
+if not vllm_version_is("0.20.2"):
     from vllm_ascend.worker.v2.spec_decode.probabilistic_rejection_sampler_utils import (
         probabilistic_rejection_sample as npu_probabilistic_rejection_sample,
     )
